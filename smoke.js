@@ -186,6 +186,8 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   check((bIdx[0]||'').trim() === '88',
         'board is ranked by the Aftermath Index, best first: ' + (bIdx[0]||'').trim());
   check(await page.locator('#m-home .brow .tgrade').count() >= 6, 'board shows the Tux grade on each row');
+  check(await page.locator('#m-home .tuxnote').count() === 0,
+        'the board rows stay clean - the note belongs where the prose is, not 25 times over');
   /* the wide gutter between the score and the bar now carries Tux's headline */
   const hls = await page.locator('#m-home .brow .hl').allTextContents();
   check(hls.length === 7, 'every board row has a headline cell (got ' + hls.length + ')');
@@ -280,6 +282,8 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   check(grade4 === 0, 'game with no excitement index shows no grade');
   const grade1 = await page.locator('#af-feed .game[data-gid="1"] .tgrade').count();
   check(grade1 === 1, 'a graded game wears the Tux mark, not a grey pill');
+  check(await page.locator('#af-feed .game .tuxnote').count() === 7,
+        'every game card with a recap carries the beagle note');
   const tmpl = await page.locator('#af-feed .game[data-gid="3"] .pill.tmpl').count();
   check(tmpl === 1, 'templated recap is labelled as one');
 
@@ -365,6 +369,13 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   await page.click('#dg-body tr');
   await page.waitForTimeout(250);
   check(await page.locator('#drawer.on').count() === 1, 'row click opens the drawer');
+  /* THE BEAGLE DISCLAIMER must travel with every recap, not live only on the About
+     page. A reader found a wrong nickname before any disclaimer existed. */
+  const note = await page.textContent('#drawer-body .tuxnote').catch(()=>null);
+  check(!!note && /I am a beagle and I get things wrong/.test(note),
+        'the drawer carries the beagle note next to the recap');
+  check(/Trust the numbers/.test(note || ''),
+        'and it says which half is trustworthy, not just "AI may make mistakes"');
   const dtxt = await page.textContent('#drawer-body');
   check(/Aftermath Index/.test(dtxt) && /Provenance/.test(dtxt), 'drawer shows the box and provenance');
   check(/no line published/.test(dtxt) || /Closing spread/.test(dtxt), 'drawer states the market honestly');
@@ -575,6 +586,9 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   await page.click('#nav button[data-mode="aftermath"]');
   await page.waitForTimeout(400);
   await page.screenshot({ path:'_shot_aftermath.png', fullPage:false });
+  await page.evaluate(()=>{ const c=document.querySelector('#af-feed .game'); c.scrollIntoView({block:'center'}); });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path:'_shot_card.png', fullPage:false });
   await page.click('#nav button[data-mode="season"]');
   await page.waitForTimeout(400);
   await page.screenshot({ path:'_shot_season.png', fullPage:false });
