@@ -1,0 +1,619 @@
+/*
+  Tux's Take - offline smoke test.
+
+  Runs the REAL index.html in headless Chromium with every ArcGIS request MOCKED,
+  so it needs no network and no live service. Fails on any page error, renders
+  every page, exercises presets / sorts / week selector / drawer / map, and
+  measures horizontal overflow on a 390px phone.
+
+      npm i playwright     (once)
+      node smoke.js
+
+  The FIXTURE deliberately includes the awkward cases: a game with no betting
+  line, one with no excitement index, an overtime game, a neutral site, a game
+  whose home team has no coordinates, a templated recap, and a null crowd.
+*/
+const { chromium } = require('playwright');
+const path = require('path');
+
+const BROWSER = process.env.PW_CHROME ||
+  '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
+const PH = { n:-1, f:-1.0, r:-999.0, s:'N/A' };
+
+function game(o){
+  return Object.assign({
+    game_id:1, season:2025, week:12, season_type:'regular', week_key:'2025-0-12',
+    week_label:'Week 12', is_latest:1, start_date:Date.parse('2025-11-15T19:00:00Z'),
+    home_id:100, away_id:200, home_team:'Home State', away_team:'Away Tech',
+    home_conference:'Big Test', away_conference:'Test American',
+    home_division:'FBS', away_division:'FBS',
+    home_points:24, away_points:21, home_line_scores:'7^3^7^7', away_line_scores:'10^0^7^4',
+    total_points:45, margin:3, winner_id:100, winner_team:'Home State',
+    excitement_index:7.4, excitement_pctile:81, aftermath_index:74,
+    index_why:'excitement 81, drama 91, swing 60', elo_swing:22.0,
+    attendance:64000, capacity:70000, pct_capacity:91, venue:'Test Field',
+    host_city:'Testville', host_state:'TS', neutral_site:0, conference_game:1,
+    closing_spread:-3.5, over_under:47.5, line_provider:'consensus',
+    cover_result:'Push', ou_result:'Under', home_rank:PH.n, away_rank:PH.n,
+    upset:0, rivalry:0, road_miles:410.0,
+    pass_leader:'Q Back^Home State^22/31, 260 YDS, 2 TD',
+    rush_leader:'R Unner^Away Tech^18 CAR, 96 YDS',
+    recv_leader:PH.s,
+    home_logo_url:'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=',
+    away_logo_url:PH.s, home_color:'#0021A5', away_color:'#000000',
+    home_text_on:'#FFFFFF', away_text_on:'#FFFFFF', data_tier:'FBS',
+    home_ml:-165, away_ml:140, ml_payout:60.6, fav_won:1, fav_covered:0,
+    home_won:1, one_score:1, went_ot:0, ranked_matchup:0, comeback:1
+  }, o);
+}
+const RESULTS = [
+  game({ game_id:1 }),
+  game({ game_id:2, home_team:'Ranked U', away_team:'Also Ranked', home_rank:4, away_rank:11,
+         ranked_matchup:1, aftermath_index:88, margin:1, home_points:28, away_points:27,
+         home_line_scores:'7^7^7^7', away_line_scores:'14^3^7^3', total_points:55,
+         upset:1, rivalry:1, fav_won:0, fav_covered:0, ml_payout:210.0, home_id:101 }),
+  /* no betting line at all - every market field is a placeholder */
+  game({ game_id:3, home_team:'No Line State', away_team:'Nobody Booked', closing_spread:PH.r,
+         over_under:PH.r, cover_result:'No line', ou_result:'No line', line_provider:PH.s,
+         home_ml:PH.n, away_ml:PH.n, ml_payout:PH.f, fav_won:PH.n, fav_covered:PH.n,
+         aftermath_index:41, home_id:102 }),
+  /* no excitement index -> no grade, and the index runs on fewer components */
+  game({ game_id:4, home_team:'Dark Data Tech', away_team:'Unmeasured A&M',
+         excitement_index:PH.r, excitement_pctile:PH.n, aftermath_index:38,
+         index_why:'drama 74, stakes 45 (4 of 7 components had data)', home_id:103 }),
+  /* overtime: five periods */
+  game({ game_id:5, home_team:'Overtime U', away_team:'Free Football St',
+         home_line_scores:'7^7^7^7^6', away_line_scores:'7^7^7^7^0',
+         home_points:34, away_points:28, total_points:62, margin:6, went_ot:1,
+         aftermath_index:79, home_id:104 }),
+  /* neutral site: capacity, city and travel deliberately blank */
+  game({ game_id:6, home_team:'Neutral Home', away_team:'Neutral Away', neutral_site:1,
+         capacity:PH.n, pct_capacity:PH.n, host_city:PH.s, host_state:PH.s,
+         road_miles:PH.f, aftermath_index:66, home_id:105 }),
+  /* home team with no coordinates - must not break the map */
+  game({ game_id:7, home_team:'Nowhere College', away_team:'Off Grid U', home_id:999,
+         aftermath_index:23, margin:35, home_points:45, away_points:10, one_score:0,
+         comeback:0, total_points:55, home_line_scores:'14^14^10^7', away_line_scores:'3^0^7^0' }),
+  /* previous week, so the week selector has something to switch to */
+  game({ game_id:8, week:11, week_key:'2025-0-11', week_label:'Week 11', is_latest:0,
+         home_team:'Last Week St', away_team:'Old News U', aftermath_index:52,
+         attendance:PH.n, pct_capacity:PH.n, home_id:106 })
+];
+const RECAPS = RESULTS.map((g,i)=>({
+  game_id:g.game_id, week_key:g.week_key, week_label:g.week_label, is_latest:g.is_latest,
+  headline: i===2 ? 'NO LINE STATE 24, NOBODY BOOKED 21' : 'TEST HEADLINE FOR GAME '+g.game_id,
+  recap_body: i===2
+    ? 'No Line State beat Nobody Booked 24-21. The fourth quarter went 7-4. 64,000 in the building.'
+    : 'AROOOOO. A recap body for game '+g.game_id+' that says some things about football and stops.',
+  money_line: i===2 ? 'No Line State beat Nobody Booked 24-21.' : 'A quotable sentence for game '+g.game_id+'.',
+  angle: ['nailbiter','upset','chalk','chalk','shootout','revenge','blowout','comeback'][i],
+  tux_grade: g.excitement_pctile>0 ? 'A' : PH.s,
+  voice_engine: i===2 ? 'template' : 'groq',
+  voice_model: i===2 ? 'deterministic' : 'openai/gpt-oss-120b',
+  style_version:'1.1', gen_status: i===2 ? 'template' : 'voiced',
+  recap_generated: Date.parse('2026-08-27T05:00:00Z'), aftermath_index:g.aftermath_index
+}));
+const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
+  team_id:id, latitude:33+i*1.6, longitude:-97+i*2.1 }));
+
+(async () => {
+  const browser = await chromium.launch({ executablePath: BROWSER });
+  const page = await browser.newPage({ viewport:{ width:1280, height:900 } });
+  const errors = [], consoleErrors = [];
+  page.on('pageerror', e => errors.push((e.stack||String(e)).split('\n').slice(0,4).join(' >> ')));
+  page.on('console', m => { if (m.type()==='error') consoleErrors.push(m.text()); });
+
+  await page.route('**services.arcgisonline.com/**', r => r.abort());
+  await page.route('**/query**', route => {
+    const u = route.request().url();
+    const body = route.request().postData() || '';
+    const off = +((body.match(/resultOffset=(\d+)/) || [])[1] || 0);
+    let data = /CFB_Atlas_Teams/.test(u) ? TEAMS
+             : /FeatureServer\/1\//.test(u) ? RECAPS : RESULTS;
+    const slice = off === 0 ? data : [];
+    route.fulfill({ contentType:'application/json', body: JSON.stringify({
+      exceededTransferLimit:false, features: slice.map(a=>({ attributes:a })) })});
+  });
+
+  const ok = [], bad = [];
+  const check = (cond, label) => (cond ? ok : bad).push(label);
+
+  await page.goto('file://' + path.resolve(__dirname, 'index.html'));
+  await page.waitForFunction("document.querySelector('#loadstate').textContent.indexOf('games recapped')>=0",
+                             null, { timeout:15000 });
+  const stamp = await page.textContent('#loadstate');
+  check(/8 games recapped/.test(stamp), 'header stamp counts 8 games: ' + stamp.trim());
+  check(/Week 12/.test(stamp), 'header names the latest week');
+
+  const PAGES = ['home','aftermath','dig','yard','season','couch'];
+
+  /* HEADER PARITY WITH ASK THE ATLAS. Those values are lifted from the published
+     file; if someone tweaks this header in isolation the family stops matching. */
+  const hdr = await page.evaluate(() => {
+    const g = (s,k) => { const e = document.querySelector(s); return e ? getComputedStyle(e)[k] : null; };
+    return {
+      wrapPad:  g('.topwrap','padding'),
+      wrapGap:  g('.topwrap','gap'),
+      navGap:   g('nav.modes','gap'),
+      btnPad:   g('nav.modes button','padding'),
+      btnSize:  g('nav.modes button','fontSize'),
+      btnRad:   g('nav.modes button','borderRadius'),
+      t1:       g('.brand .t1','fontSize'),
+      t2:       g('.brand .t2','fontSize'),
+      mark:     g('.brand img','width'),
+      stampIn:  !!document.querySelector('.topwrap .loadstate'),
+      activeBg: (() => { const b = document.querySelector('nav.modes button[aria-selected="true"]');
+                         return b ? getComputedStyle(b).backgroundColor : null; })()
+    };
+  });
+  check(hdr.wrapPad === '10px 18px' && hdr.wrapGap === '18px', 'topwrap padding/gap match Ask the Atlas: ' + hdr.wrapPad + ' / ' + hdr.wrapGap);
+  check(hdr.navGap === '4px' && hdr.btnPad === '8px 14px' && hdr.btnSize === '11px' && hdr.btnRad === '999px',
+        'nav pills match Ask the Atlas: ' + [hdr.navGap,hdr.btnPad,hdr.btnSize,hdr.btnRad].join(' '));
+  check(hdr.t1 === '15px' && hdr.t2 === '10px' && hdr.mark === '34px',
+        'brand type and mark match: ' + [hdr.t1,hdr.t2,hdr.mark].join(' '));
+  check(hdr.stampIn, 'the load stamp lives inside .topwrap and wraps, as it does on Ask the Atlas');
+  check(/77,\s*195,\s*232/.test(hdr.activeBg || ''),
+        'the selected tab is a SOLID accent pill, not an outline: ' + hdr.activeBg);
+  check(await page.locator('nav.modes button em').count() === 4, 'the four Q prefixes are <em>, muted like Ask the Atlas');
+
+  /* Shell geometry must match Ask the Atlas: same column, same footer rule. */
+  const geo = await page.evaluate(() => {
+    const g = s => { const e = document.querySelector(s); return e ? getComputedStyle(e).maxWidth : null; };
+    return { main:g('main'), top:g('.topwrap'), foot:g('footer .fw') };
+  });
+  check(geo.main === '1560px' && geo.top === '1560px' && geo.foot === '1560px',
+        'shell column is 1560px everywhere, like Ask the Atlas: ' + JSON.stringify(geo));
+
+  /* home: the intro, the question cards and the three sibling apps */
+  const hTxt = await page.textContent('#m-home');
+  check(/The dog has notes/.test(hTxt), 'home leads with the intro, not a page question');
+  check(/The dog is real/.test(hTxt), 'home states the fictional-analyst line up front');
+  const qc = await page.locator('#m-home .qcard').count();
+  check(qc === 4, 'home shows 4 question cards (got ' + qc + ')');
+  const qstats = await page.locator('#m-home .qcard .qstat b').allTextContents();
+  check(qstats.length === 4 && qstats.every(t=>/\d/.test(t)),
+        'every question card carries a live number: ' + qstats.join(' / '));
+  check(await page.locator('#m-home .sib').count() === 3, 'three sibling-app cards');
+  const sibs = await page.locator('#m-home .sib h4').allTextContents();
+  check(sibs[0].includes('Experience') && sibs[1].includes('Ask the Atlas') && sibs[2].includes('Tux'),
+        'sibling order is Experience, Ask the Atlas, Tux: ' + sibs.join(' | '));
+  check(await page.locator('#m-home .sib.youarehere h4').count() === 1, 'Tux card is flagged "you are here"');
+
+  /* the week's board - Home answers "what happened" before a page is chosen */
+  const brows = await page.locator('#m-home .brow').count();
+  check(brows === 7, 'home Top 25 lists the whole latest week when it is short of 25 (got ' + brows + ')');
+  const bIdx = await page.locator('#m-home .brow .mbar b').allTextContents();
+  check((bIdx[0]||'').trim() === '88',
+        'board is ranked by the Aftermath Index, best first: ' + (bIdx[0]||'').trim());
+  check(await page.locator('#m-home .brow .tgrade').count() >= 6, 'board shows the Tux grade on each row');
+  /* the wide gutter between the score and the bar now carries Tux's headline */
+  const hls = await page.locator('#m-home .brow .hl').allTextContents();
+  check(hls.length === 7, 'every board row has a headline cell (got ' + hls.length + ')');
+  check(/TEST HEADLINE FOR GAME 2/.test(hls[0] || ''),
+        'the headline shown is the recap headline for that game: ' + (hls[0]||'').trim());
+  check(await page.locator('#m-home .brow .hl[title]').count() === 7,
+        'the full headline is available as a tooltip when it clamps');
+  const clamp = await page.evaluate(() => getComputedStyle(document.querySelector('#m-home .brow .hl')).webkitLineClamp);
+  check(clamp === '2', 'a long headline wraps to two lines instead of stretching the row');
+  check(await page.locator('#m-home .brow .pill.angle').count() >= 6, 'board shows the recap angle on each row');
+  check(/Tux\u2019s Top 25|Tux.s Top 25/.test(hTxt), 'the board is a named Top 25');
+  /* the board sits at the BOTTOM of home and the tip sits at the TOP of the board */
+  const order = await page.evaluate(() => {
+    const kids = Array.from(document.querySelectorAll('#m-home > *'));
+    const bi = kids.findIndex(k => k.querySelector('.board'));
+    return { bi, n: kids.length };
+  });
+  check(order.bi === order.n - 1, 'the board is the last block on home (' + order.bi + ' of ' + (order.n-1) + ')');
+  const inBoard = await page.evaluate(() => {
+    const card = document.querySelector('#m-home .board').closest('.card');
+    const kids = Array.from(card.children);
+    return { hint: kids.findIndex(k=>k.classList.contains('hint')),
+             board: kids.findIndex(k=>k.classList.contains('board')) };
+  });
+  check(inBoard.hint > -1 && inBoard.hint < inBoard.board, 'the tip sits above the board');
+  await page.click('#m-home .brow');
+  await page.waitForTimeout(250);
+  check(await page.locator('#drawer.on').count() === 1, 'a board row opens the box score drawer');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
+  await page.click('#m-home .qcard[data-goto="dig"]');
+  await page.waitForTimeout(250);
+  check(await page.locator('#m-dig.on').count() === 1, 'a question card navigates to its page');
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(150);
+
+  for (const p of PAGES){
+    await page.click('#nav button[data-mode="'+p+'"]');
+    await page.waitForTimeout(320);
+    const txt = (await page.textContent('#m-'+p) || '').trim();
+    check(txt.length > 200 && !/^Loading/.test(txt), 'page renders: ' + p + ' (' + txt.length + ' chars)');
+  }
+
+  /* Q1 - opens on the latest week, presets narrow, sort reorders */
+  await page.click('#nav button[data-mode="aftermath"]');
+  await page.waitForTimeout(200);
+  check(await page.inputValue('#af-week') === '2025-0-12', 'Aftermath opens on is_latest week');
+  const n0 = await page.locator('#af-feed .game').count();
+  check(n0 === 7, 'Aftermath shows the 7 games of week 12 (got ' + n0 + ')');
+  const aTxt = await page.textContent('#m-aftermath');
+  check(/seven weighted components|weighted components/.test(aTxt),
+        'Q1 explains what goes into the Aftermath Index');
+  check(/Tux\u2019s letter grade|Tux.s letter grade/.test(aTxt), 'Q1 explains the Tux grade');
+  check(/full box score/.test(aTxt), 'Q1 tells the reader the cards are clickable');
+  check(await page.locator('#m-aftermath .exbox').count() === 1, 'Q1 explainer wears the orange panel');
+  const afTips = await page.locator('#af-presets .chip[title]').count();
+  const afChips = await page.locator('#af-presets .chip').count();
+  check(afTips === afChips && afChips > 4, 'every Q1 quick filter carries a tooltip (' + afTips + '/' + afChips + ')');
+
+  await page.click('#af-presets .chip[data-p="ml"]');
+  await page.waitForTimeout(150);
+  const nMl = await page.locator('#af-feed .game').count();
+  check(nMl === 1, 'preset "moneyline paid" leaves 1 game (got ' + nMl + ')');
+  /* stacking: a second chip must NARROW, not replace. This is the whole point of
+     multi-select, and single-select would silently pass a count check on its own. */
+  await page.click('#af-presets .chip[data-p="onescore"]');
+  await page.waitForTimeout(150);
+  const nBoth = await page.locator('#af-feed .game').count();
+  const pressed = await page.locator('#af-presets .chip[aria-pressed="true"]').count();
+  check(pressed === 2, 'two quick filters stay lit at once (got ' + pressed + ')');
+  check(nBoth <= nMl, 'stacked filters narrow rather than replace (' + nMl + ' -> ' + nBoth + ')');
+  check(/Stacked:/.test(await page.textContent('#m-aftermath')), 'the page says which filters are stacked');
+  await page.click('#af-presets .chip[data-p="onescore"]');
+  await page.click('#af-presets .chip[data-p="ml"]');
+  await page.waitForTimeout(150);
+  check(await page.locator('#af-feed .game').count() === 7, 'clearing every chip restores the full week');
+  await page.selectOption('#af-sort', 'close');
+  await page.waitForTimeout(150);
+  const firstClose = await page.locator('#af-feed .game').first().getAttribute('data-gid');
+  check(firstClose === '2', 'sort by closest finish puts the 1-point game first (got ' + firstClose + ')');
+  await page.selectOption('#af-week', '2025-0-11');
+  await page.waitForTimeout(150);
+  check(await page.locator('#af-feed .game').count() === 1, 'week selector switches to week 11');
+
+  /* the OT game must render 5 periods, and the no-index game must show no grade */
+  await page.selectOption('#af-week', '2025-0-12');
+  await page.waitForTimeout(150);
+  const otHead = await page.locator('#af-feed .game[data-gid="5"] .qline th').allTextContents();
+  check(otHead.join(',').includes('OT'), 'overtime game shows an OT column: ' + otHead.join(','));
+  const grade4 = await page.locator('#af-feed .game[data-gid="4"] .tgrade').count();
+  check(grade4 === 0, 'game with no excitement index shows no grade');
+  const grade1 = await page.locator('#af-feed .game[data-gid="1"] .tgrade').count();
+  check(grade1 === 1, 'a graded game wears the Tux mark, not a grey pill');
+  const tmpl = await page.locator('#af-feed .game[data-gid="3"] .pill.tmpl').count();
+  check(tmpl === 1, 'templated recap is labelled as one');
+
+  /* Q2 - blanks sort last in both directions */
+  await page.click('#nav button[data-mode="dig"]');
+  await page.waitForTimeout(250);
+  const rowsN = await page.locator('#dg-body tr').count();
+  check(rowsN === 8, 'Dig lists all 8 games (got ' + rowsN + ')');
+  for (const dir of ['desc','asc']){
+    await page.click('#dg-head th[data-k="ml_payout"]');
+    await page.waitForTimeout(120);
+    const cells = await page.locator('#dg-body tr td:nth-child(11)').allTextContents();
+    const lastIsBlank = cells[cells.length-1].trim() === '—';
+    check(lastIsBlank, 'ML blanks sort last (' + dir + ')');
+  }
+  const heads = (await page.locator('#dg-head th').allTextContents()).map(t=>t.trim());
+  check(heads.some(h=>/Excitement Index/i.test(h)), 'Dig spells out Excitement Index: ' + heads.join(' | '));
+  check(heads.some(h=>/Tux Grade/i.test(h)), 'Dig spells out Tux Grade');
+  check(heads.some(h=>/ATS/i.test(h)), 'Dig keeps an ATS column');
+  const thTips = await page.locator('#dg-head th[title]').count();
+  check(thTips === heads.length, 'every Dig column header has a tooltip (' + thTips + '/' + heads.length + ')');
+  const atsTip = await page.getAttribute('#dg-head th[data-k="cover_result"]', 'title');
+  check(/covered/i.test(atsTip || '') && (atsTip || '').length > 60,
+        'the ATS tooltip actually explains covering: ' + (atsTip||'').slice(0,70));
+  check(await page.locator('#m-dig .hint').count() === 1, 'Dig tells the reader rows are clickable');
+
+  await page.click('#dg-presets .chip[data-p="ranked"]');
+  await page.waitForTimeout(150);
+  check(await page.locator('#dg-body tr').count() === 1, 'Dig preset "both ranked" leaves 1');
+  /* BK asked for instant classics AND upsets at the same time */
+  await page.click('#dg-presets .chip[data-p="classic"]');
+  await page.waitForTimeout(150);
+  const dPressed = await page.locator('#dg-presets .chip[aria-pressed="true"]').count();
+  check(dPressed === 2, 'Dig filters stack too (got ' + dPressed + ' lit)');
+  await page.click('#dg-presets .chip[data-p="classic"]');
+  await page.click('#dg-presets .chip[data-p="ranked"]');
+  await page.waitForTimeout(150);
+  check(await page.locator('#dg-body tr').count() === 8, 'clearing Dig chips restores all 8');
+
+  /* drawer */
+  const dTxt = await page.textContent('#m-dig');
+  check(/four columns people ask about/i.test(dTxt), 'Dig fills the top right with a reader guide');
+  check(await page.locator('#m-dig .exbox').count() === 1, 'Q2 explainer wears the orange panel');
+  check(/Volatility, not quality/i.test(dTxt), 'the guide repeats the excitement-index caveat where it is read');
+  check(/Home covered/i.test(dTxt), 'the guide explains covering in plain words');
+  await page.evaluate(()=>{ const w=document.querySelector('#m-dig .tablewrap'); if(w) w.scrollLeft=0; });
+
+  /* EARLY-SEASON EMPTY STATES. A team that has not played yet is the normal case in
+     week 1 - CFBD's 2026 week 1 is a ten-day bucket and on the Sunday in the middle of
+     it only 124 of 455 games had been played. "No results" must not read as broken. */
+  await page.fill('#dg-q', 'zzzznotateam');
+  await page.waitForTimeout(220);
+  const eDig = await page.textContent('#m-dig .emptystate');
+  check(!!eDig && /already been played/.test(eDig),
+        'Dig explains an empty team search instead of rendering an empty table');
+  check(/season opens\s+later/.test(eDig || ''), 'and names the early-season reason');
+  check(await page.locator('#dg-body tr').count() === 1, 'the empty state occupies the table, not nothing');
+  await page.fill('#dg-q', '');
+  await page.waitForTimeout(220);
+  check(await page.locator('#dg-body tr').count() === 8, 'clearing the search restores the table');
+
+  await page.click('#nav button[data-mode="aftermath"]');
+  await page.waitForTimeout(280);
+  await page.fill('#af-q', 'zzzznotateam');
+  await page.waitForTimeout(220);
+  const eAf = await page.textContent('#m-aftermath .emptystate');
+  check(/already been played/.test(eAf || ''), 'Q1 explains an empty team search the same way');
+  await page.fill('#af-q', '');
+  await page.waitForTimeout(220);
+  await page.click('#af-presets .chip[data-p="ml"]');
+  await page.click('#af-presets .chip[data-p="ot"]');
+  await page.waitForTimeout(250);
+  const eChip = await page.textContent('#m-aftermath .emptystate').catch(()=>null);
+  check(eChip === null || /stack with AND/.test(eChip),
+        'a chip dead end blames the chips, not a missing team');
+  await page.click('#af-presets .chip[data-p="ml"]');
+  await page.click('#af-presets .chip[data-p="ot"]');
+  await page.waitForTimeout(220);
+  await page.click('#nav button[data-mode="dig"]');
+  await page.waitForTimeout(280);
+  await page.evaluate(()=>{ const w=document.querySelector('#m-dig .tablewrap'); if(w) w.scrollLeft=0; });
+
+  await page.click('#dg-body tr');
+  await page.waitForTimeout(250);
+  check(await page.locator('#drawer.on').count() === 1, 'row click opens the drawer');
+  const dtxt = await page.textContent('#drawer-body');
+  check(/Aftermath Index/.test(dtxt) && /Provenance/.test(dtxt), 'drawer shows the box and provenance');
+  check(/no line published/.test(dtxt) || /Closing spread/.test(dtxt), 'drawer states the market honestly');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  check(await page.locator('#drawer.on').count() === 0, 'Escape closes the drawer');
+
+  /* Q3 - the map places what it can and says what it could not */
+  await page.click('#nav button[data-mode="yard"]');
+  await page.waitForTimeout(700);
+  const yc = await page.textContent('#yd-count');
+  const yf = await page.textContent('#yd-foot');
+  /* the Yard defaults to EVERY week, so it is 7 of 8 - one home team has no coordinates */
+  check(/7 of 8 games placed/.test(yc), 'Yard places 7 of 8: ' + yc.replace(/\s+/g,' ').trim());
+  check(/1 game could not be placed/.test(yf) && /no campus coordinates/.test(yf),
+        'Yard names the gap rather than dropping it: ' + yf.replace(/\s+/g,' ').trim());
+  check(await page.locator('#map-yard .leaflet-interactive').count() >= 5, 'map draws markers');
+
+  /* the symbology chooser: every scheme must redraw and relabel its own legend */
+  for (const c of ['index','excite','home','grade','market','angle']){
+    await page.selectOption('#yd-color', c);
+    await page.waitForTimeout(220);
+    const legN = await page.locator('#yd-legend span').count();
+    check(legN >= 2, 'colour scheme "' + c + '" draws a legend (' + legN + ' keys)');
+  }
+  for (const z of ['index','points','crowd','flat','margin']){
+    await page.selectOption('#yd-size', z);
+    await page.waitForTimeout(180);
+  }
+  check(await page.locator('#map-yard .leaflet-interactive').count() >= 5, 'map survives every size scheme');
+  const yTxt = await page.textContent('#m-yard');
+  check(/Symbology/i.test(yTxt), 'Yard fills the top right with the symbology chooser');
+  check(/What this map is not/i.test(yTxt), 'Yard says what the map does NOT show');
+  check(/home team.s campus/i.test(yTxt), 'Yard says where the dot actually sits');
+  check(await page.locator('#yd-color option').count() === 6, 'six colour schemes offered');
+  check(await page.locator('#yd-size option').count() === 5, 'five size schemes offered');
+
+  /* Q4 + about */
+  await page.click('#nav button[data-mode="season"]');
+  await page.waitForTimeout(400);
+  const sTxt = await page.textContent('#m-season');
+  check(/Week Index/.test(sTxt), 'Long Season explains the Week Index');
+  check(/Best week so far/.test(sTxt), 'Long Season names the best week');
+  await page.click('#nav button[data-mode="couch"]');
+  await page.waitForTimeout(300);
+  const cTxt = await page.textContent('#m-couch');
+  check(/volatility, not quality/.test(cTxt), 'About states the excitement-index caveat');
+  check(/Gamble Responsibly/.test(cTxt), 'About carries the responsible-gambling line');
+  check(/Division II and III are absent/.test(cTxt), 'About explains the D2/D3 absence');
+  check(/About Tux.s Human/i.test(cTxt), 'Under the Couch credits the human');
+  check(/Timmons/.test(cTxt), 'Under the Couch names Timmons Group');
+  check(await page.locator('#m-couch a[href*="linkedin"]').count() >= 1, 'Under the Couch links LinkedIn');
+  check(/About Tux\b/.test(cTxt), 'Under the Couch has Tux\u2019s own biography');
+  check(await page.locator('#m-couch img.biopic').count() >= 1, 'Under the Couch shows the real photographs');
+  check(/Services this page reads/i.test(cTxt), 'Under the Couch lists the services it reads');
+  check(await page.locator('#m-couch .endpoint').count() >= 3,
+        'the services section names each endpoint, Ask-the-Atlas style');
+  /* data honesty must sit ABOVE the index explanations */
+  const iHonest = cTxt.indexOf('honest'), iIndex = cTxt.indexOf('Aftermath Index');
+  check(iHonest > -1 && iHonest < iIndex, 'data honesty comes before the index explanations');
+
+  /* the footer is the Ask the Atlas three-column block, not a single left column */
+  const fTxt = await page.textContent('footer');
+  check(await page.locator('footer .footgrid > div').count() === 3, 'footer has three columns');
+  check(/\bData\b/.test(fTxt) && /Built with/.test(fTxt), 'footer carries Data and Built with');
+  const fStamp = await page.textContent('#foot-stamp');
+  check(/Data last refreshed/.test(fStamp), 'footer stamps when the data was refreshed');
+  check(/This page loaded/.test(fStamp), 'footer stamps when the page loaded');
+  check(/\bET\b|EDT|EST/.test(fStamp), 'both stamps name the time zone: ' + fStamp.replace(/\s+/g,' ').trim());
+
+  /* NO BRITISH SPELLING. BK asked for this explicitly and it is easy to reintroduce. */
+  const BRIT = /\b(colour|colours|coloured|favourite|favourites|favoured|labelled|behaviour|centre|neighbour|organise|recognise|analyse|programme|travelled|modelled|defence|licence|whilst)\b/i;
+  for (const p of PAGES){
+    await page.click('#nav button[data-mode="'+p+'"]');
+    await page.waitForTimeout(300);
+    const bad2 = await page.evaluate(sel => {
+      const re = /\b(colour|colours|coloured|favourite|favourites|favoured|labelled|behaviour|centre|neighbour|organise|recognise|analyse|programme|travelled|modelled|defence|licence|whilst)\b/i;
+      const root = document.querySelector(sel);
+      const hits = [];
+      if (re.test(root.textContent)) hits.push('body text');
+      root.querySelectorAll('[title]').forEach(n => { if (re.test(n.title)) hits.push('tooltip: ' + n.title.slice(0,40)); });
+      return hits.slice(0,3);
+    }, '#m-'+p);
+    check(bad2.length === 0, 'no British spelling on ' + p + (bad2.length ? ' -> ' + bad2.join(' | ') : ''));
+  }
+
+  /* the one bar, drawn the same way in all four places, never scaled to the screen */
+  await page.click('#nav button[data-mode="dig"]');
+  await page.waitForTimeout(300);
+  const dbars = await page.evaluate(() => Array.from(document.querySelectorAll('#dg-body .mbar'))
+    .slice(0,6).map(m => ({ v:+m.querySelector('b').textContent, w:m.querySelector('i') ? m.querySelector('i').style.width : null })));
+  const scaled = dbars.filter(b=>b.w).every(b => Math.abs(parseFloat(b.w) - b.v) <= 2);
+  check(scaled, 'Dig bar fill is the value out of 100, not out of the biggest value on screen: ' +
+        JSON.stringify(dbars.slice(0,3)));
+  const orange = await page.evaluate(() => {
+    const i = document.querySelector('#dg-body .mbar i');
+    return i ? getComputedStyle(i).backgroundImage : '';
+  });
+  check(/242,\s*100,\s*48/.test(orange), 'the bar fill is the orange accent');
+  await page.click('#nav button[data-mode="season"]');
+  await page.waitForTimeout(350);
+  check(await page.locator('#m-season .wkrow .mbar').count() >= 2, 'Long Season uses the same bar');
+  const wkb = await page.evaluate(() => Array.from(document.querySelectorAll('#m-season .wkrow .mbar'))
+    .map(m => ({ v:+m.querySelector('b').textContent, w:parseFloat(m.querySelector('i').style.width) })));
+  check(wkb.every(b => Math.abs(b.w - b.v) <= 2),
+        'a Week Index of 58 fills 58% of a full-width track: ' + JSON.stringify(wkb));
+  const sTxt2 = await page.textContent('#m-season');
+  check(/running total/i.test(sTxt2), 'Long Season explains that the leaderboard counts are running totals');
+  check(/over 1 game/.test(sTxt2), 'the leaderboard sub-label says what the count is');
+  check(/covered \d+ of \d+/.test(sTxt2) || /Not enough of the season/.test(sTxt2),
+        'the ATS sub-label says what the fraction is');
+  check(await page.locator('#m-season .feed').count() === 1, 'Long Season uses the same .feed as Q1');
+  check(await page.evaluate(() => !document.querySelector('#m-season .card .feed')),
+        'the Q4 game feed sits outside a card, exactly as it does on Q1');
+
+  /* Q3 symbology panel, and the tip above the map */
+  await page.click('#nav button[data-mode="yard"]');
+  await page.waitForTimeout(400);
+  check(await page.locator('#m-yard .symbox').count() === 1, 'Q3 symbology is its own highlighted panel');
+  const yOrder = await page.evaluate(() => {
+    const kids = Array.from(document.querySelectorAll('#m-yard > *'));
+    return { hint: kids.findIndex(k=>k.classList.contains('hint')),
+             map:  kids.findIndex(k=>k.querySelector('#map-yard')) };
+  });
+  check(yOrder.hint > -1 && yOrder.hint < yOrder.map, 'the tip sits above the map');
+
+  /* Under the Couch: BK's requested order and content */
+  await page.click('#nav button[data-mode="couch"]');
+  await page.waitForTimeout(400);
+  const c2 = await page.textContent('#m-couch');
+  check(await page.locator('#m-couch img.biopic').count() === 2, 'both real photographs of Tux are on the page');
+  check(await page.locator('#m-couch .biobody').count() === 1, 'the biography runs full width');
+  check(await page.locator('#m-couch .honest .mbar').count() >= 6, 'data honesty uses the shared bar');
+  check(/games currently loaded/.test(c2) && /move as the season grows/.test(c2),
+        'the honesty copy is written to keep reading correctly as the archive grows');
+  check(await page.locator('#m-couch .tgrade').count() >= 3, 'the Tux Grade section wears the badge');
+  const endpointFont = await page.evaluate(() => {
+    const a = document.querySelector('#m-couch .endpoint a');
+    return a ? getComputedStyle(a).fontFamily : '';
+  });
+  check(/mono|Consolas/i.test(endpointFont), 'endpoints are monospaced, like Ask the Atlas: ' + endpointFont);
+  const cOrder = await page.evaluate(() => {
+    const t = document.querySelector('#m-couch').textContent;
+    return { human:t.indexOf('About Tux'), honest:t.indexOf('Data honesty'),
+             svc:t.indexOf('Services this page reads'), gate:t.indexOf('How Tux is stopped') };
+  });
+  check(cOrder.honest < cOrder.svc && cOrder.svc < cOrder.gate,
+        'order is honesty, then services, then the pipeline last: ' + JSON.stringify(cOrder));
+  check(await page.locator('#m-couch .pstep').count() === 6, 'the pipeline is told in six numbered steps');
+  check(/Groq/.test(c2) && /gpt-oss-120b/.test(c2), 'the pipeline names the engine and the model');
+  check(!/08b_game_recaps|\.ipynb/.test(c2), 'the pipeline does NOT name the notebook file');
+  /* the worked example: the beat sheet the model got, and the recap it returned */
+  check(await page.locator('#m-couch pre.beat').count() === 1, 'the beat sheet sample is shown');
+  const beat = await page.textContent('#m-couch pre.beat');
+  check(/"numbers"/.test(beat) && /"beats"/.test(beat) && /Gunner Stockton/.test(beat),
+        'the sample carries the whitelist and the beats');
+  check(await page.locator('#m-couch .outbox').count() === 1, 'the resulting recap is shown beside it');
+  const outb = await page.textContent('#m-couch .outbox');
+  check(/AROOOOO/.test(outb) && /76,131/.test(outb), 'the recap sample is the real returned copy');
+  check(/nearly[\s\S]{0,12}failed/.test(c2), 'the example is honest about the one number that nearly failed');
+  /* the house rules, as a list, in BK's words */
+  check(await page.locator('#m-couch ol.rules li').count() === 6, 'the six house rules are a numbered list');
+  /* the rules belong to the pipeline card at the bottom, NOT to the biography */
+  check(await page.locator('#m-couch .biobody ol.rules').count() === 0,
+        'the rules are out of the About Tux biography');
+  check(await page.evaluate(() => {
+          const ol = document.querySelector('#m-couch ol.rules');
+          const card = ol.closest('.card');
+          return !!card.querySelector('.pipe');
+        }), 'the rules sit in the how-it-works card at the bottom of the page');
+  const cOrder2 = await page.evaluate(() => {
+    const t = document.querySelector('#m-couch').textContent;
+    return { svc:t.indexOf('Services this page reads'), rules:t.indexOf('The only commands Tux listens to') };
+  });
+  check(cOrder2.svc < cOrder2.rules, 'the rules come after the services section: ' + JSON.stringify(cOrder2));
+  const rules = (await page.locator('#m-couch ol.rules li').allTextContents()).join(' | ');
+  check(/NUMBERS/.test(rules) && /Nobody speaks except Tux/.test(rules) && /No picks/.test(rules) &&
+        /Under 150 words/.test(rules), 'the rules are the real ones: ' + rules.slice(0,60) + '...');
+  check(await page.locator('#m-couch .biolayout > *').count() === 3,
+        'About Tux is photo / biography / photo');
+
+  /* the footer link order BK asked for */
+  const flinks = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('footer .footgrid > div:first-child a')).map(a=>a.textContent.trim()));
+  check(flinks.indexOf('The CFB Atlas Experience') < flinks.indexOf('Ask the Atlas'),
+        'the Experience link comes before Ask the Atlas: ' + flinks.join(' / '));
+
+  /* phone: no horizontal overflow on any page */
+  await page.setViewportSize({ width:390, height:844 });
+  for (const p of PAGES){
+    await page.click('#nav button[data-mode="'+p+'"]');
+    await page.waitForTimeout(350);
+    const over = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(over <= 1, 'no horizontal overflow at 390px: ' + p + ' (' + over + 'px)');
+  }
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(350);
+  await page.evaluate(()=>window.scrollTo(0,1100));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path:'_shot_phone_home.png', fullPage:false });
+  await page.click('#nav button[data-mode="couch"]');
+  await page.waitForTimeout(400);
+  await page.evaluate(()=>window.scrollTo(0,600));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path:'_shot_phone_couch.png', fullPage:false });
+  await page.setViewportSize({ width:1280, height:900 });
+  await page.click('#nav button[data-mode="aftermath"]');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path:'_shot_aftermath.png', fullPage:false });
+  await page.click('#nav button[data-mode="season"]');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path:'_shot_season.png', fullPage:false });
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(350);
+  await page.screenshot({ path:'_shot_home.png', fullPage:false });
+  await page.evaluate(()=>window.scrollTo(0,700));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path:'_shot_home2.png', fullPage:false });
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
+  await page.waitForTimeout(250);
+  await page.screenshot({ path:'_shot_footer.png', fullPage:false });
+  await page.setViewportSize({ width:1600, height:900 });
+  await page.waitForTimeout(300);
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
+  await page.waitForTimeout(250);
+  await page.screenshot({ path:'_shot_board_wide.png', fullPage:false });
+  await page.setViewportSize({ width:1280, height:900 });
+  await page.waitForTimeout(250);
+  for (const p of ['dig','yard','couch']){
+    await page.click('#nav button[data-mode="'+p+'"]');
+    await page.waitForTimeout(500);
+    await page.screenshot({ path:'_shot_'+p+'.png', fullPage:false });
+  }
+  await page.click('#nav button[data-mode="couch"]');
+  await page.waitForTimeout(400);
+  for (const [y,n] of [[900,'2'],[1800,'3'],[2700,'4'],[3600,'5'],[4600,'6']]){
+    await page.evaluate(v=>window.scrollTo(0,v), y);
+    await page.waitForTimeout(220);
+    await page.screenshot({ path:'_shot_couch'+n+'.png', fullPage:false });
+  }
+
+  await browser.close();
+  console.log('\n' + ok.map(s=>'  ok   ' + s).join('\n'));
+  if (bad.length) console.log('\n' + bad.map(s=>'  FAIL ' + s).join('\n'));
+  if (errors.length) console.log('\nPAGE ERRORS:\n' + errors.map(e=>'  ! ' + e).join('\n'));
+  const cerr = consoleErrors.filter(t=>!/net::ERR|Failed to load resource/.test(t));
+  if (cerr.length) console.log('\nCONSOLE ERRORS:\n' + cerr.map(e=>'  ! ' + e).join('\n'));
+  console.log('\n' + ok.length + ' passed, ' + bad.length + ' failed, ' +
+              errors.length + ' page errors, ' + cerr.length + ' console errors');
+  process.exit(bad.length || errors.length || cerr.length ? 1 : 0);
+})();
