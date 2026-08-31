@@ -1542,9 +1542,15 @@ function emptyState(opts){
    2026-08-31. Virginia are the Cavaliers. The pipeline now cross-checks every nickname
    against the two teams actually playing, so that particular error cannot recur - but
    a gate can only catch what it can define, and the prose is still written by a model.
-   This note sits with every recap. It is in Tux's voice because a disclaimer nobody
-   reads is worse than no disclaimer, and it is specific about WHAT can be wrong,
-   because "AI may make mistakes" tells a reader nothing they can act on. */
+   The note lives at the BOTTOM OF THE DRAWER only - not on the game cards. It was on
+   the cards first, and with up to 25 of them on the board it read as noise rather than
+   as a disclosure; the same sixty words under every card is wallpaper. The drawer is
+   where someone has already chosen to look at one game closely, and putting it under
+   the provenance block means it lands next to who wrote the recap and which style card
+   they followed, which is the context that makes it mean something. It is in Tux's
+   voice because a disclaimer nobody reads is worse than no disclaimer, and it is
+   specific about WHAT can be wrong, because "AI may make mistakes" tells a reader
+   nothing they can act on. */
 const TUX_NOTE =
   '<div class="tuxnote"><span class="pawmark">&#9679;&#9679;<br>&#9679;&#9679;&#9679;</span>' +
   '<div><b>I am a beagle and I get things wrong.</b> Every number here was computed in ' +
@@ -1621,7 +1627,6 @@ function gameCard(g){
     (has(r.headline) ? '<div class="ghead">'+esc(r.headline)+'</div>' : '') +
     (has(r.money_line) ? '<div class="gmoney">&ldquo;'+esc(r.money_line)+'&rdquo;</div>' : '') +
     (has(r.recap_body) ? '<div class="gbody">'+esc(r.recap_body)+'</div>' : '') +
-    (has(r.recap_body) || has(r.money_line) ? '<div style="padding:0 16px">'+TUX_NOTE+'</div>' : '') +
     '<div class="gfoot">' + sidePills(g) +
       '<span class="idx">' +
         tuxGrade(g) +
@@ -2685,7 +2690,6 @@ function openGame(gid){
     quarterTable(g).replace('class="qline"','class="qline" style="padding-left:0"') +
     (has(r.headline) ? '<div style="font-size:16px;font-weight:900;margin:11px 0 5px">'+esc(r.headline)+'</div>' : '') +
     (has(r.recap_body) ? '<p class="sub" style="font-size:13px">'+esc(r.recap_body)+'</p>' : '') +
-    (has(r.recap_body) ? TUX_NOTE : '') +
     '<h3 class="qh" style="margin:17px 0 8px">The box</h3>' +
     '<dl class="kv">' +
       row('Aftermath Index', g.aftermath_index!=null ? '<b>'+g.aftermath_index+'</b>' : null,
@@ -2728,7 +2732,9 @@ function openGame(gid){
       row('game_id', g.game_id, 'CFBD game id - the join key across every Atlas layer.') +
       row('Data tier', has(g.data_tier) ? esc(g.data_tier) : null) +
     '</dl>' +
-    '<p class="tiny dim" style="margin-top:15px">Gamble Responsibly. 18+.</p>';
+    (has(r.recap_body) ? TUX_NOTE.replace('class="tuxnote"',
+        'class="tuxnote" style="margin-top:16px"') : '') +
+    '<p class="tiny dim" style="margin-top:12px">Gamble Responsibly. 18+.</p>';
   $('#drawer').classList.add('on'); $('#drawer').setAttribute('aria-hidden','false');
   $('#scrim').classList.add('on');
   $('#drawer').scrollTop = 0;

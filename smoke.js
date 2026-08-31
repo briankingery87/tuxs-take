@@ -186,8 +186,7 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   check((bIdx[0]||'').trim() === '88',
         'board is ranked by the Aftermath Index, best first: ' + (bIdx[0]||'').trim());
   check(await page.locator('#m-home .brow .tgrade').count() >= 6, 'board shows the Tux grade on each row');
-  check(await page.locator('#m-home .tuxnote').count() === 0,
-        'the board rows stay clean - the note belongs where the prose is, not 25 times over');
+  check(await page.locator('#m-home .tuxnote').count() === 0, 'the home board stays clean too');
   /* the wide gutter between the score and the bar now carries Tux's headline */
   const hls = await page.locator('#m-home .brow .hl').allTextContents();
   check(hls.length === 7, 'every board row has a headline cell (got ' + hls.length + ')');
@@ -282,8 +281,8 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   check(grade4 === 0, 'game with no excitement index shows no grade');
   const grade1 = await page.locator('#af-feed .game[data-gid="1"] .tgrade').count();
   check(grade1 === 1, 'a graded game wears the Tux mark, not a grey pill');
-  check(await page.locator('#af-feed .game .tuxnote').count() === 7,
-        'every game card with a recap carries the beagle note');
+  check(await page.locator('#af-feed .game .tuxnote').count() === 0,
+        'game cards do NOT carry the beagle note - 25 copies of it on a board is noise');
   const tmpl = await page.locator('#af-feed .game[data-gid="3"] .pill.tmpl').count();
   check(tmpl === 1, 'templated recap is labelled as one');
 
@@ -373,12 +372,25 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
      page. A reader found a wrong nickname before any disclaimer existed. */
   const note = await page.textContent('#drawer-body .tuxnote').catch(()=>null);
   check(!!note && /I am a beagle and I get things wrong/.test(note),
-        'the drawer carries the beagle note next to the recap');
+        'the drawer carries the beagle note');
   check(/Trust the numbers/.test(note || ''),
         'and it says which half is trustworthy, not just "AI may make mistakes"');
+  /* it belongs at the BOTTOM, under the provenance block - not interrupting the recap */
+  const notePos = await page.evaluate(() => {
+    const kids = Array.from(document.querySelector('#drawer-body').children);
+    const n = kids.findIndex(k => k.classList.contains('tuxnote'));
+    const p = kids.findIndex(k => /Provenance/.test(k.textContent) && k.tagName === 'H3');
+    return { note:n, prov:p, total:kids.length };
+  });
+  check(notePos.note > notePos.prov && notePos.note >= notePos.total - 2,
+        'the beagle note sits at the bottom of the drawer, after provenance: ' + JSON.stringify(notePos));
   const dtxt = await page.textContent('#drawer-body');
   check(/Aftermath Index/.test(dtxt) && /Provenance/.test(dtxt), 'drawer shows the box and provenance');
   check(/no line published/.test(dtxt) || /Closing spread/.test(dtxt), 'drawer states the market honestly');
+  await page.screenshot({ path:'_shot_drawer.png', fullPage:false });
+  await page.evaluate(()=>{ const d=document.querySelector('#drawer'); d.scrollTop = d.scrollHeight; });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path:'_shot_drawer_bottom.png', fullPage:false });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   check(await page.locator('#drawer.on').count() === 0, 'Escape closes the drawer');
