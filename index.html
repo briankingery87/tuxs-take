@@ -780,6 +780,10 @@ select,input[type=search]{background:var(--deep);border:1px solid var(--line-str
 .lchip.lg{width:52px;height:52px;padding:6px}
 .lchip img{max-width:100%;max-height:100%;display:block}
 .lchip.empty{background:rgba(255,255,255,.14)}
+/* A monogram fills its own square, so the white plate behind a real crest would show
+   as a bright ring around it. */
+.lchip.mark{background:none;padding:0}
+.lchip.mark img{width:100%;height:100%;border-radius:7px}
 
 /* ---------- game card ---------- */
 .feed{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(470px,100%),1fr))}
@@ -886,6 +890,62 @@ table.wks th.l,table.wks td.l{text-align:left;white-space:normal;overflow-wrap:a
 table.wks td.wi{font-weight:900;color:var(--accent)}
 table.wks tbody tr.latest{background:rgba(242,100,48,.09)}
 table.wks tbody tr.latest td.l b{color:var(--alert)}
+/* ---------- the conference ledger + non-conference head to head ---------- */
+table.wks th.sortable{cursor:pointer;user-select:none}
+table.wks th.sortable:hover{color:var(--ink)}
+table.wks th.sorted{color:var(--accent)}
+table.wks th.sortable i{font-style:normal;margin-left:3px;font-size:9px}
+table.wks.conf td.l{min-width:180px}
+table.wks.conf td.pos{color:#54c78a;font-weight:900}
+table.wks.conf td.neg{color:var(--alert);font-weight:900}
+table.wks.conf td.wi{min-width:118px}
+table.wks.conf .cbest{display:block;font-weight:400;margin-top:1px}
+/* clickable ledger rows + the conference drawer */
+table.wks tbody tr.crow{cursor:pointer}
+table.wks tbody tr.crow:hover{background:rgba(77,195,232,.08)}
+table.wks tbody tr.crow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+table.wks tbody tr.crow .chev{color:var(--ink-3);font-weight:900;margin-right:6px}
+table.wks tbody tr.crow:hover .chev{color:var(--accent)}
+.cstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px}
+.cstat{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);
+  padding:8px 10px;min-width:0}
+.cstat b{display:block;font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;
+  line-height:1.15;overflow-wrap:anywhere}
+.cstat span{display:block;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:700;margin-top:2px}
+table.wks.cteam{font-size:12px}
+table.wks.cteam th,table.wks.cteam td{padding:5px 7px}
+table.wks.cteam td.l{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:146px}
+table.wks.cteam td.l .tn{font-weight:900}
+table.wks.cteam td.l .cbest{flex:0 0 100%;font-weight:400;margin-top:-1px}
+table.wks.cteam td.wi{font-weight:900;color:var(--accent)}
+table.wks.cteam .pos{color:#54c78a;font-weight:900}
+table.wks.cteam .neg{color:var(--alert);font-weight:900}
+button.mini{background:var(--deep);border:1px solid var(--line-strong);border-radius:6px;
+  padding:3px 8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:900;color:var(--ink-2);cursor:pointer}
+button.mini:hover{border-color:var(--accent);color:var(--ink)}
+.h2h{display:grid;gap:6px}
+.h2hhead,.h2hrow{display:grid;
+  grid-template-columns:minmax(0,1fr) 74px minmax(0,1fr) minmax(96px,128px) minmax(0,1.15fr);
+  gap:10px;align-items:center}
+.h2hhead{padding:0 11px 5px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:900}
+.h2hhead span:nth-child(2){text-align:center}
+.h2hrow{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r);padding:8px 11px}
+.h2hrow .side{font-size:13px;font-weight:600;color:var(--ink-2);min-width:0;overflow-wrap:anywhere;
+  line-height:1.2}
+.h2hrow .side.r{text-align:right}
+.h2hrow .side.lead{color:var(--ink);font-weight:900}
+.h2hrow .rec{text-align:center;font-weight:900;font-variant-numeric:tabular-nums;font-size:14px;flex:none}
+.h2hrow .topg{font-size:11px;color:var(--ink-3);min-width:0;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media (max-width:860px){
+  .h2hhead{display:none}
+  .h2hrow{grid-template-columns:minmax(0,1fr) 74px minmax(0,1fr)}
+  .h2hrow .mbar{grid-column:1 / -1}
+  .h2hrow .topg{grid-column:1 / -1}
+}
 
 /* ---------- filter block: an intro, then the controls ---------- */
 .fbox{border:1px solid var(--line);border-radius:var(--r);background:rgba(255,255,255,.02);padding:13px 14px}
@@ -967,6 +1027,33 @@ td .tgrade b{font-size:13px}
   .brow .rt{justify-content:flex-start}
   .boardhead span:nth-child(n+3){display:none}
 }
+
+/* ---------- the Top 25 in POLL mode ----------
+   Same grid as the game board on purpose, so switching the picker does not shift the
+   columns under the reader. Only the contents of columns 2 and 3 change: a team and
+   its conference instead of a matchup, a result instead of a headline. */
+.brow .rk{display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1}
+.brow .cf{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:700;flex:none}
+.brow.noop{cursor:default;opacity:.62}
+.brow.noop:hover{border-color:var(--line);background:var(--panel-2)}
+.mv{font-size:9px;font-weight:900;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.mv.up{color:#54c78a}
+.mv.dn{color:var(--alert)}
+.mv.flat,.mv.new{color:var(--ink-3);font-weight:700}
+.pres{min-width:0;display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.3}
+.pres b{font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:900;flex:none}
+.pres.w b{color:#54c78a}
+.pres.l b{color:var(--alert)}
+.pres.t b{color:var(--ink-3)}
+.pres .on{font-weight:700;color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.pres .sc{font-weight:900;font-variant-numeric:tabular-nums;flex:none}
+.pres.w .sc{color:var(--ink)}
+.pres.l .sc{color:var(--ink-2)}
+.brow .hl.none,.pres.none{color:var(--ink-3);font-weight:400}
+label.fl{display:flex;flex-direction:column;gap:4px;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:900}
+label.fl select{font-size:13px;font-weight:700}
 
 /* ---------- home: question cards (the Ask the Atlas pattern) ---------- */
 .hero-split{display:grid;gap:20px;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:start}
@@ -1132,6 +1219,12 @@ pre.beat{margin:0;background:rgba(0,0,0,.34);border:1px solid var(--line);border
   border-left:1px solid var(--line-strong);transform:translateX(100%);transition:transform .2s;
   z-index:1001;overflow-y:auto;padding:18px}
 #drawer.on{transform:none}
+/* The conference breakdown carries twelve columns, and at 560px the payoff column -
+   each team's distance from its own conference average - fell off the right edge.
+   A reader should not have to discover a horizontal scrollbar to see the one number
+   the panel was opened for. Conference mode gets a wider panel; the game drawer keeps
+   the original width, where a narrow column of prose reads better. */
+#drawer.wide{width:min(880px,100%)}
 #drawer .x{position:absolute;top:13px;right:15px;background:none;border:1px solid var(--line-strong);
   border-radius:7px;width:30px;height:30px;cursor:pointer;color:var(--ink-2);font-size:16px;line-height:1}
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 14px;font-size:13px}
@@ -1230,7 +1323,13 @@ const ORG = 'https://services.arcgis.com/4fG3YBzBoefRGq66/arcgis/rest/services/'
 const SVC = {
   results: ORG + 'CFB_Atlas_Recaps/FeatureServer/0',
   recaps:  ORG + 'CFB_Atlas_Recaps/FeatureServer/1',
-  teams:   ORG + 'CFB_Atlas_Teams/FeatureServer/0'
+  teams:   ORG + 'CFB_Atlas_Teams/FeatureServer/0',
+  /* The polls live on CFB Atlas Stats, not on Recaps - a DIFFERENT service, which is
+     why the load is wrapped in its own try/catch. Five polls land here every week:
+     AP Top 25, Coaches Poll, FCS Coaches Poll, and the AFCA Division II and III
+     coaches polls. Sublayer 1 is the Rankings table; the id is a published contract
+     (docs\published_services.md) and is assigned by map drawing order, not by name. */
+  rankings: ORG + 'CFB_Atlas_Stats/FeatureServer/1'
 };
 const ITEM = { recaps:'d086e18de78745479a0cbffccdf473c0', teams:'8e69edf90e734165b2adb24d4437d02d' };
 const ITEM_URL = id => 'https://www.arcgis.com/home/item.html?id=' + id;
@@ -1252,6 +1351,14 @@ const F_RESULTS = ['game_id','season','week','season_type','week_key','week_labe
 const F_RECAPS = ['game_id','week_key','week_label','is_latest','headline','recap_body','money_line',
   'angle','tux_grade','voice_engine','voice_model','style_version','gen_status','recap_generated',
   'aftermath_index'].join(',');
+/* Teams used to be fetched for coordinates alone. The Top 25 board needs a name, a
+   logo and a conference for teams that are RANKED BUT NOT IN THE ARCHIVE - a poll can
+   rank a team that had a bye, or whose game was dropped as a D2-only matchup, and a
+   row with a blank name reads as a bug. One query, four more fields. */
+const F_TEAMS = ['team_id','school','mascot','conference','division',
+  'logo_url','primary_color','text_color','latitude','longitude'].join(',');
+const F_RANK  = ['season','week','poll','rank','team_id','school','conference',
+  'points','first_votes'].join(',');
 
 const TILE_BASE = 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
 const TILE_REF  = 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
@@ -1360,10 +1467,63 @@ function vizColor(hex){
   const mix = rgb.map(v => Math.round(t>0 ? v+(255-v)*t : v*(1+t)));
   return '#' + mix.map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,'0')).join('');
 }
-function logoChip(url, size){
+/* ---------- team marks: there is no such thing as a blank crest ----------
+   WHY (2026-09-08). BK spotted teams on the board with an empty white square where a
+   logo should be - Ohio Dominican, West Florida, Chicago State. It is not a bug in the
+   app and it is not fixable upstream: `home_logo_url` is literally the string 'N/A'
+   in the service for those rows, because the logos come from ESPN and ESPN has no
+   crest for most of Division II and III. The Teams service is fed from the same place,
+   so falling back to it changes nothing.
+   So the app draws its own. teamMark() builds a monogram as an inline SVG data URI,
+   in the team's OWN primary colour, which the service does publish for nearly
+   everybody. It is a real identifier rather than a generic grey box - two teams on the
+   same row never look alike. There is no network request, so it cannot fail.
+   It is also the onerror handler for every real logo: an ESPN URL that 404s, or is
+   blocked as mixed content, degrades to the monogram instead of to a hole. */
+const MARK_CACHE = new Map();
+function initialsOf(name){
+  /* strip the parenthetical CFBD uses to disambiguate - "Northwestern (IA)" is
+     Northwestern to a reader, and "N(" is not a monogram */
+  const clean = String(name||'').replace(/\([^)]*\)/g,' ');
+  const skip = { of:1, and:1, the:1, at:1, a:1 };
+  const words = (clean.match(/[A-Za-z']+/g) || []).filter(w => !skip[w.toLowerCase()]);
+  if (!words.length) return '?';
+  if (words.length === 1) return words[0].slice(0,2).toUpperCase();
+  return words.slice(0, words.length >= 3 ? 3 : 2).map(w => w[0]).join('').toUpperCase();
+}
+function teamMark(name, bg, fg){
+  const ini = initialsOf(name);
+  const b = /^#[0-9a-f]{6}$/i.test(String(bg||'')) ? bg : '#25415c';
+  const f = /^#[0-9a-f]{6}$/i.test(String(fg||'')) ? fg : '#ffffff';
+  const k = ini + b + f;
+  if (MARK_CACHE.has(k)) return MARK_CACHE.get(k);
+  /* 100x100 so one mark scales to every chip size. Font shrinks with the letter count
+     so three initials do not overflow the square. */
+  const fs = ini.length >= 3 ? 34 : ini.length === 2 ? 42 : 50;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+    '<rect width="100" height="100" rx="14" fill="' + b + '"/>' +
+    '<text x="50" y="50" fill="' + f + '" font-family="Segoe UI,Helvetica,Arial,sans-serif" ' +
+    'font-size="' + fs + '" font-weight="700" text-anchor="middle" ' +
+    'dominant-baseline="central">' + ini + '</text></svg>';
+  const uri = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  MARK_CACHE.set(k, uri);
+  return uri;
+}
+/* The service stores ESPN urls as http://. This page is served over https on GitHub
+   Pages, where a http image is mixed content and is blocked outright - so upgrade the
+   scheme rather than wondering why a crest that exists will not draw. */
+function httpsUp(u){ return String(u).replace(/^http:\/\//i, 'https://'); }
+
+function logoChip(url, size, name, bg, fg){
   const c = 'lchip ' + (size||'md');
-  return has(url) ? '<span class="'+c+'"><img loading="lazy" src="'+esc(url)+'" alt=""></span>'
-                  : '<span class="'+c+' empty"></span>';
+  const mark = teamMark(name, bg, fg);
+  const usable = has(url) && /^https?:\/\//i.test(String(url));
+  const src = usable ? httpsUp(url) : mark;
+  /* this.onerror=null FIRST, or a failing mark would loop forever */
+  const fb = usable ? ' onerror="this.onerror=null;this.src=\'' + mark + '\'"' : '';
+  return '<span class="' + c + (usable ? '' : ' mark') + '"' +
+    (name ? ' title="' + esc(name) + '"' : '') + '>' +
+    '<img loading="lazy" src="' + src + '" alt=""' + fb + '></span>';
 }
 function parseQ(s){ return has(s) ? String(s).split('^').map(x=>parseInt(x,10)).filter(n=>isFinite(n)) : []; }
 function leader(s){
@@ -1400,7 +1560,8 @@ async function queryAll(url, params){
   return out;
 }
 
-const DB = { games:[], recaps:new Map(), coords:new Map(), weeks:[], latestKey:null, refreshed:null, ready:false };
+const DB = { games:[], recaps:new Map(), coords:new Map(), teams:new Map(),
+             polls:[], pollSets:[], weeks:[], latestKey:null, refreshed:null, ready:false };
 
 async function loadAll(){
   const step = t => $('#loadstate').innerHTML = t + '<b>&hellip;</b>';
@@ -1414,9 +1575,26 @@ async function loadAll(){
 
   step('Placing the games');
   try {
-    const t = await queryAll(SVC.teams, { outFields:'team_id,latitude,longitude' });
-    t.forEach(x => { if (has(x.latitude) && has(x.longitude)) DB.coords.set(x.team_id,[x.latitude,x.longitude]); });
+    const t = await queryAll(SVC.teams, { outFields:F_TEAMS });
+    t.forEach(x => {
+      DB.teams.set(x.team_id, x);
+      if (has(x.latitude) && has(x.longitude)) DB.coords.set(x.team_id,[x.latitude,x.longitude]);
+    });
   } catch(e){ console.warn('team coordinates unavailable - The Yard will be empty', e); }
+
+  /* THE POLLS. A second service, so it gets its own try/catch: if Stats is down, or
+     Rankings is still empty in the preseason, the board silently falls back to Tux's
+     own Top 25 rather than taking the home page with it. Rankings is genuinely empty
+     until the first poll of the season publishes - that is by design, not a fault. */
+  step('Reading the polls');
+  try {
+    DB.polls = await queryAll(SVC.rankings,
+      { outFields:F_RANK, orderByFields:'season DESC, week DESC, poll ASC, rank ASC' });
+  } catch(e){
+    DB.polls = [];
+    console.warn('rankings unavailable - the board offers Tux\'s Top 25 only', e);
+  }
+  DB.pollSets = pollSets(DB.polls);
 
   /* weeks, newest first. week_key sorts correctly across season types by design. */
   const seen = new Map();
@@ -1440,6 +1618,75 @@ async function loadAll(){
     (seasons.length ? ' &middot; ' + seasons.join(', ') + ' season' : '');
   $('#loadstate').title = 'Read live from the CFB Atlas Recaps service on this page load. ' +
     'The week advances on its own - nothing here is hard-coded.';
+}
+
+/* ---------- 3b. the polls ---------------------------------------- */
+/* Rankings arrives as one flat row per ranked team. Everything downstream wants it as
+   a LIST OF POLLS, each poll being a (season, week) snapshot of 25 teams, so it is
+   pivoted once here rather than filtered on every redraw. */
+const TUX_POLL = '__tux';
+/* Display order is editorial, not alphabetical: the two FBS polls first because that
+   is what most readers mean by "the Top 25", then FCS, then the two AFCA divisions.
+   Anything CFBD adds later that is not on this list still appears - it sorts to the
+   end and keeps its own name, so a new poll shows up without a code change. */
+const POLL_ORDER = ['AP Top 25', 'FCS Coaches Poll',
+                    'AFCA Division II Coaches Poll', 'AFCA Division III Coaches Poll'];
+/* HIDDEN ON PURPOSE (2026-09-08, BK). CFBD publishes a Coaches Poll alongside the AP
+   for FBS and the two lists are near-identical week to week - offering both invites a
+   reader to go looking for a difference that is not worth the click. One poll per
+   division is the rule: AP for FBS, the coaches poll for FCS, II and III, because
+   those divisions have no AP equivalent. The row is still LOADED, so nothing
+   downstream breaks and un-hiding it is a one-line change. */
+const POLL_HIDE = { 'Coaches Poll':1 };
+/* Short labels for the picker. The full CFBD name is kept as the tooltip. */
+const POLL_SHORT = {
+  'AP Top 25':'AP Top 25 (FBS)',
+  'Coaches Poll':'Coaches Poll (FBS)',
+  'FCS Coaches Poll':'FCS Coaches Poll',
+  'AFCA Division II Coaches Poll':'Division II Coaches',
+  'AFCA Division III Coaches Poll':'Division III Coaches'
+};
+function pollLabel(p){ return p === TUX_POLL ? 'Tux\u2019s Top 25' : (POLL_SHORT[p] || p); }
+
+function pollSets(rowsIn){
+  const by = new Map();
+  (rowsIn||[]).forEach(r => {
+    if (!has(r.poll) || !has(r.rank)) return;
+    if (POLL_HIDE[r.poll]) return;
+    const key = r.season + '|' + r.week + '|' + r.poll;
+    if (!by.has(key)) by.set(key, { key, poll:r.poll, season:r.season, week:r.week, rows:[] });
+    by.get(key).rows.push(r);
+  });
+  const out = Array.from(by.values());
+  out.forEach(p => p.rows.sort((a,b)=>a.rank-b.rank));
+  /* newest first, then by editorial poll order */
+  const oi = p => { const i = POLL_ORDER.indexOf(p); return i < 0 ? 99 : i; };
+  out.sort((a,b) => (b.season-a.season) || (b.week-a.week) || (oi(a.poll)-oi(b.poll)));
+  return out;
+}
+/* The same poll one week earlier, so a row can show which way a team is moving.
+   Absent in week 1 by definition - every team is new to the poll then. */
+function prevPoll(set){
+  if (!set) return null;
+  return DB.pollSets.filter(p => p.poll===set.poll && p.season===set.season && p.week < set.week)
+                    .sort((a,b)=>b.week-a.week)[0] || null;
+}
+/* A ranked team's game in that week of the archive. Regular season wins a tie, because
+   a poll week and a postseason bucket can share a number. */
+function teamGameIn(teamId, season, week){
+  const hits = DB.games.filter(g => g.season===season && g.week===week &&
+                                    (g.home_id===teamId || g.away_id===teamId));
+  return hits.find(g => g.season_type==='regular') || hits[0] || null;
+}
+function teamMeta(id, fallbackSchool, fallbackConf){
+  const t = DB.teams.get(id) || {};
+  return { school: has(t.school) ? t.school : (fallbackSchool || ''),
+           conf:   has(t.conference) ? t.conference : (fallbackConf || ''),
+           logo:   has(t.logo_url) ? t.logo_url : null,
+           /* the monogram needs the team's own colours, or every unlogo'd school in
+              Division III comes out the same shade of nothing */
+           color:  has(t.primary_color) ? t.primary_color : null,
+           textOn: has(t.text_color) ? t.text_color : null };
 }
 
 /* everything the app needs that the service does not store */
@@ -1612,7 +1859,8 @@ function sidePills(g){
 function gameCard(g){
   const r = g._rec, idx = g.aftermath_index;
   const side = (team, conf, pts, logo, rank, won, isHome) =>
-    '<div class="gteam'+(isHome?' h':'')+(won?' won':' lost')+'">' + logoChip(logo,'md') +
+    '<div class="gteam'+(isHome?' h':'')+(won?' won':' lost')+'">' +
+      logoChip(logo,'md', team, isHome?g.home_color:g.away_color, isHome?g.home_text_on:g.away_text_on) +
       '<div style="min-width:0"><div class="nm">' +
         (has(rank) && rank>0 ? '<span class="rankpill">'+rank+'</span>' : '') + esc(team) + '</div>' +
         '<div class="cf">'+esc(conf||'')+'</div></div>' +
@@ -1679,15 +1927,186 @@ function headlineCell(g){
 }
 
 const BOARD_N = 25;   /* a Top 25, the same length the sport already counts in */
+
+/* ============================ THE TOP 25 ========================= */
+/* WHY THIS IS TWO BOARDS IN ONE (2026-09-08). BK asked for the home page's Top 25 to
+   open on the real AP poll, with the other polls and Tux's own ranking available as
+   filters, plus a week filter.
+   The catch: a poll ranks TEAMS, and Tux's Top 25 ranks GAMES. Those are different
+   objects and a shared row layout that fits both would fit neither well. So the board
+   has two modes and each keeps its own honest shape:
+     - Tux mode: one row per game, unchanged from the original board.
+     - Poll mode: one row per ranked team, and the row shows WHAT THAT TEAM DID that
+       week - the result, the opponent, and where the game is in the archive, its
+       Aftermath Index, Tux's grade and his headline.
+   That second mode is the reason this is worth building rather than reprinting a poll:
+   nothing else in the app answers "how did the top 25 actually get on". A ranked team
+   with no archived game is labeled rather than left blank - it either had a bye, or its
+   game fell outside what the pipeline recaps, and those are different facts. */
+const TOP = { poll:null, key:null };
+
+function topDefault(){
+  /* Open on the AP poll's newest snapshot. Fall back through the editorial order, then
+     to Tux's own board if Rankings is empty (true every preseason). */
+  for (const name of POLL_ORDER){
+    const hit = DB.pollSets.find(p => p.poll===name);
+    if (hit) return { poll:name, key:hit.key };
+  }
+  if (DB.pollSets.length) return { poll:DB.pollSets[0].poll, key:DB.pollSets[0].key };
+  return { poll:TUX_POLL, key:DB.latestKey };
+}
+
+function movePill(rank, prev){
+  if (!prev) return '<span class="mv new" title="Not in the previous poll, or this is the season’s first poll.">new</span>';
+  const d = prev - rank;
+  if (d === 0) return '<span class="mv flat" title="Held the same rank as last week.">&mdash;</span>';
+  return d > 0
+    ? '<span class="mv up" title="Up ' + d + ' place' + (d===1?'':'s') + ' from ' + prev + '.">&#9650;' + d + '</span>'
+    : '<span class="mv dn" title="Down ' + (-d) + ' place' + (d===-1?'':'s') + ' from ' + prev + '.">&#9660;' + (-d) + '</span>';
+}
+
+/* What a ranked team did, in words, plus the score. Four possible truths and the row
+   says which one applies rather than showing an empty cell. */
+function pollResultCell(g, teamId){
+  if (!g) return '<span class="hl none" title="No completed game for this team in that week of the archive. ' +
+                 'Either a bye, or a game the pipeline does not recap - FBS is covered in full, FCS only when ' +
+                 'ranked, a rivalry, or decided by 7 or fewer, and D2-D3-only games are dropped.">' +
+                 'No archived game that week</span>';
+  const home = g.home_id === teamId;
+  const my   = home ? g.home_points : g.away_points;
+  const th   = home ? g.away_points : g.home_points;
+  const opp  = home ? g.away_team   : g.home_team;
+  const oppLogo = home ? g.away_logo_url : g.home_logo_url;
+  const won  = my > th;
+  const verb = my === th ? 'tied' : (won ? 'beat' : 'lost to');
+  const where = g.neutral_site===1 ? ' (neutral)' : (home ? '' : ' (away)');
+  return '<span class="pres ' + (won?'w':(my===th?'t':'l')) + '" title="' + esc(g._matchup) + '">' +
+    '<b>' + esc(verb) + '</b>' +
+    logoChip(oppLogo,'sm', opp, home?g.away_color:g.home_color, home?g.away_text_on:g.home_text_on) +
+    '<span class="on">' + esc(opp||'') + esc(where) + '</span>' +
+    '<span class="sc">' + (has(my)?my:dash) + '&ndash;' + (has(th)?th:dash) + '</span></span>';
+}
+
+function pollBoardRows(set){
+  const prev = prevPoll(set);
+  const pmap = new Map();
+  if (prev) prev.rows.forEach(r => pmap.set(r.team_id, r.rank));
+  return set.rows.slice(0, BOARD_N).map(r => {
+    const m = teamMeta(r.team_id, r.school, r.conference);
+    const g = teamGameIn(r.team_id, set.season, set.week);
+    const ix = g ? val(g.aftermath_index) : null;
+    const votes = has(r.first_votes) && r.first_votes > 0
+      ? ' · ' + r.first_votes + ' first-place vote' + (r.first_votes===1?'':'s') : '';
+    const pts = has(r.points) ? r.points + ' poll points' + votes : 'no poll points published';
+    const open = g ? ' data-gid="'+g.game_id+'" class="brow game"' : ' class="brow noop" disabled';
+    return '<button' + open + ' title="' +
+        esc(m.school + ' — ' + pts + (g ? '. Open the full box score.' : '.')) + '">' +
+      '<span class="rk">' + r.rank + movePill(r.rank, pmap.get(r.team_id)) + '</span>' +
+      '<span class="mu"><span class="sd">' + logoChip(m.logo,'sm', m.school, m.color, m.textOn) +
+        '<span class="nm w">' + esc(m.school) + '</span>' +
+        '<span class="cf">' + esc(m.conf) + '</span></span></span>' +
+      pollResultCell(g, r.team_id) +
+      mbar(ix, 100, ix==null ? 'No Aftermath Index for this team’s week' : 'Aftermath Index ' + ix + ' out of 100') +
+      '<span class="rt">' +
+        (g && g._angle ? '<span class="pill angle" title="'+esc(ANGLE_TEXT[g._angle]||'')+'">'+esc(g._angle)+'</span>' : '') +
+        (g ? tuxGrade(g) : '') +
+      '</span>' +
+    '</button>';
+  }).join('');
+}
+
+function topControls(){
+  const polls = [];
+  const seen = new Set();
+  DB.pollSets.forEach(p => { if (!seen.has(p.poll)) { seen.add(p.poll); polls.push(p.poll); } });
+  const opt = (v, lab, sel, tip) =>
+    '<option value="'+esc(v)+'"'+(sel?' selected':'')+(tip?' title="'+esc(tip)+'"':'')+'>'+esc(lab)+'</option>';
+  const pollOpts = polls.map(p => opt(p, pollLabel(p), TOP.poll===p, p)).join('') +
+    opt(TUX_POLL, pollLabel(TUX_POLL), TOP.poll===TUX_POLL,
+        'Not a poll. Tux ranks GAMES by the Aftermath Index, so this board is the 25 best games of the week.');
+
+  let weekOpts;
+  if (TOP.poll === TUX_POLL){
+    weekOpts = DB.weeks.map(w => opt(w.key, w.label, TOP.key===w.key,
+      w.n + ' game' + (w.n===1?'':'s') + ' recapped')).join('');
+  } else {
+    const sets = DB.pollSets.filter(p => p.poll===TOP.poll);
+    weekOpts = sets.map(p => opt(p.key, 'Week ' + p.week + (p.season!==DB.pollSets[0].season ? ' · ' + p.season : ''),
+      TOP.key===p.key, p.rows.length + ' teams ranked')).join('');
+  }
+  return '<label class="fl">Top 25<select id="tp-poll" title="Which Top 25. The five real polls come straight from CFBD; Tux’s is his own ranking of games.">' +
+      pollOpts + '</select></label>' +
+    '<label class="fl">Week<select id="tp-week" title="Which week’s snapshot. A poll is a moment in time - this is the list as it stood that week.">' +
+      weekOpts + '</select></label>';
+}
+
 function weekBoard(){
-  const lab = (DB.weeks.find(w=>w.key===DB.latestKey)||{}).label || 'the latest week';
-  const wk  = DB.games.filter(g=>g.week_key===DB.latestKey)
+  if (!TOP.poll) { const d = topDefault(); TOP.poll = d.poll; TOP.key = d.key; }
+  return '<div class="card" id="top25">' + topBody() + '</div>';
+}
+
+/* Redrawn on its own when a filter changes, so the rest of the home page stays put
+   and the reader does not lose their scroll position. */
+function topBody(){
+  const isTux = TOP.poll === TUX_POLL;
+  const set   = isTux ? null : (DB.pollSets.find(p => p.key===TOP.key) ||
+                                DB.pollSets.find(p => p.poll===TOP.poll));
+  if (!isTux && set) TOP.key = set.key;
+
+  const head = '<h3 class="qh">' + (isTux ? 'Tux&rsquo;s Top 25' : 'The Top 25') +
+    ' <span>' + esc(pollHeadNote(isTux, set)) + '</span></h3>' +
+    filterBox('Which Top 25', TOP_INTRO, topControls(), null);
+
+  if (isTux) return head + tuxBoardBody();
+  if (!set)  return head + '<div class="emptystate"><b>No poll has published yet.</b><br>' +
+    'The five polls arrive from CFBD once the season starts and the Sunday pipeline has run. ' +
+    'Until then, switch the picker to <b>Tux&rsquo;s Top 25</b> - his ranking needs nothing but games.</div>';
+  return head + pollBoardBody(set);
+}
+
+function pollHeadNote(isTux, set){
+  if (isTux){
+    const lab = (DB.weeks.find(w=>w.key===TOP.key)||{}).label || 'the latest week';
+    return lab + ' · ranked by the Aftermath Index, not by kickoff time';
+  }
+  if (!set) return 'no poll published yet';
+  return set.poll + ' · week ' + set.week + ' of ' + set.season + ' · ranked by the voters, not by Tux';
+}
+
+const TOP_INTRO = 'Opens on the <b>AP Top 25</b>. The picker swaps in the Coaches Poll, the FCS poll, and ' +
+  'the Division II and III coaches polls - or <b>Tux&rsquo;s Top 25</b>, which is a different thing entirely: ' +
+  'the polls rank <b>teams</b>, Tux ranks <b>games</b>. On a poll, each row shows what that team actually did ' +
+  'that week and what Tux made of it.';
+
+function pollBoardBody(set){
+  const n = set.rows.length;
+  const played = set.rows.slice(0, BOARD_N)
+    .filter(r => teamGameIn(r.team_id, set.season, set.week)).length;
+  return '<div class="hint" style="margin:11px 0 13px"><span class="k">Tip</span><div>Click any row with an ' +
+      'archived game to open the <b>full box score</b>. Rows without one are greyed - a ranked team that had ' +
+      'a bye, or whose game sits outside what the pipeline recaps, has nothing to open.</div></div>' +
+    '<p class="sub" style="margin:0 0 13px">' + esc(set.poll) + ', as it stood in <b>week ' + set.week +
+      '</b>. ' + played + ' of these ' + Math.min(n, BOARD_N) + ' teams have a game in Tux&rsquo;s archive for ' +
+      'that week; the arrow beside each rank is the move from the previous poll, and the bar is the Aftermath ' +
+      'Index of the game they played - so a team can be ranked first and still have had the dullest afternoon ' +
+      'on the board.</p>' +
+    '<div class="boardhead pollhead"><span>#</span><span>Team</span><span>Result</span>' +
+      '<span>Aftermath</span><span>Angle &amp; grade</span></div>' +
+    '<div class="board">' + pollBoardRows(set) + '</div>';
+}
+
+function tuxBoardBody(){
+  const key = DB.weeks.some(w=>w.key===TOP.key) ? TOP.key : DB.latestKey;
+  TOP.key = key;
+  const lab = (DB.weeks.find(w=>w.key===key)||{}).label || 'the latest week';
+  const wk  = DB.games.filter(g=>g.week_key===key)
                       .sort((a,b)=>(val(b.aftermath_index)||-1)-(val(a.aftermath_index)||-1));
-  if (!wk.length) return '';
+  if (!wk.length) return '<div class="emptystate"><b>No games recapped in ' + esc(lab) + ' yet.</b><br>' +
+    'A week appears here once its games have been played and the Sunday pipeline has run.</div>';
   const top = wk.slice(0, BOARD_N);
 
-  const side = (nm, pts, logo, won) =>
-    '<span class="sd">' + logoChip(logo,'sm') +
+  const side = (nm, pts, logo, won, color, textOn) =>
+    '<span class="sd">' + logoChip(logo,'sm', nm, color, textOn) +
       '<span class="nm ' + (won?'w':'l') + '">' + esc(nm||'') + '</span>' +
       '<span class="pt"' + (won?'':' style="color:var(--ink-2)"') + '>' + (has(pts)?pts:dash) + '</span>' +
     '</span>';
@@ -1699,9 +2118,9 @@ function weekBoard(){
         'title="Open the full box score for '+esc(g._matchup)+'">' +
       '<span class="rk">'+(i+1)+'</span>' +
       '<span class="mu">' +
-        side(g.away_team, g.away_points, g.away_logo_url, !hw) +
+        side(g.away_team, g.away_points, g.away_logo_url, !hw, g.away_color, g.away_text_on) +
         '<span class="at">'+(g.neutral_site===1?'vs':'at')+'</span>' +
-        side(g.home_team, g.home_points, g.home_logo_url, hw) +
+        side(g.home_team, g.home_points, g.home_logo_url, hw, g.home_color, g.home_text_on) +
       '</span>' +
       headlineCell(g) +
       mbar(ix, 100, ix==null ? 'No Aftermath Index for this game' : 'Aftermath Index ' + ix + ' out of 100') +
@@ -1712,9 +2131,7 @@ function weekBoard(){
     '</button>';
   }).join('');
 
-  return '<div class="card">' +
-    '<h3 class="qh">Tux&rsquo;s Top 25 <span>' + esc(lab) + ' &middot; ranked by the Aftermath Index, not by kickoff time</span></h3>' +
-    '<div class="hint" style="margin:11px 0 13px"><span class="k">Tip</span><div>Click any row to open the ' +
+  return '<div class="hint" style="margin:11px 0 13px"><span class="k">Tip</span><div>Click any row to open the ' +
       '<b>full box score</b> in a side panel - every quarter, both statistical leaders, the whole betting ' +
       'result and which model wrote the recap. For all ' + nfmt(wk.length) + ' games of ' + esc(lab) +
       ', the quick filters and the week archive, open <b>The Aftermath</b>.</div></div>' +
@@ -1724,12 +2141,32 @@ function weekBoard(){
         : 'All ' + nfmt(wk.length) + ' game' + (wk.length===1?'':'s') + ' of ' + esc(lab) +
           (wk.length < BOARD_N ? ' - fewer than 25, because that is every game the week produced' : '')) +
       '. Every game is scored 0-100 on how good it actually was. The bar is that score, the letter is what ' +
-      'Tux made of it, and the word beside it is the one thing his recap was written about. The list is a ' +
-      'Top 25 for the same reason the sport counts in twenty-fives, and it reorders itself every week.</p>' +
+      'Tux made of it, and the word beside it is the one thing his recap was written about. This is the one ' +
+      'Top 25 on the page that no voter had a hand in - it ranks games, not teams, and it reorders itself ' +
+      'every week.</p>' +
     '<div class="boardhead"><span>#</span><span>Game</span><span>Tux&rsquo;s headline</span>' +
       '<span>Aftermath</span><span>Angle &amp; grade</span></div>' +
-    '<div class="board">' + rows + '</div>' +
-  '</div>';
+    '<div class="board">' + rows + '</div>';
+}
+
+/* One wiring function for both modes. Changing the poll resets the week, because a
+   week key from Tux's archive is meaningless to a poll and vice versa. */
+function wireTop(){
+  const p = $('#tp-poll'), w = $('#tp-week');
+  if (p) p.onchange = () => {
+    TOP.poll = p.value;
+    TOP.key  = TOP.poll === TUX_POLL
+      ? DB.latestKey
+      : ((DB.pollSets.find(x => x.poll===TOP.poll)||{}).key || null);
+    redrawTop();
+  };
+  if (w) w.onchange = () => { TOP.key = w.value; redrawTop(); };
+}
+function redrawTop(){
+  const el = $('#top25'); if (!el) return;
+  el.innerHTML = topBody();
+  wireTop();
+  wireCards('#top25');
 }
 
 function renderHome(el){
@@ -1820,6 +2257,7 @@ function renderHome(el){
     weekBoard();
 
   $$('#m-home .qcard').forEach(b => b.onclick = () => setMode(b.dataset.goto));
+  wireTop();
   wireCards('#m-home');
 }
 
@@ -2362,14 +2800,283 @@ function renderSeason(el){
       board('Biggest single win', 'largest margin of victory', bigWin, t=>'+'+t.v,
         'Not a running total - this one is a single game, the widest win that team has managed all season.') +
     '</div>' +
-    '<div class="card"><h3 class="qh">Season top ten <span>by Aftermath Index, every week of the archive</span></h3>' +
-      '<p class="sub" style="margin-top:8px">The same game card as The Aftermath, drawn by the same code - ' +
-      'this is the whole season competing for ten places rather than one week competing for the top of a list.</p></div>' +
-    clickHint('game card') +
-    '<div class="feed" id="ss-feed"></div>';
-  $('#ss-feed').innerHTML = DB.games.slice().sort((a,b)=>(val(b.aftermath_index)||-1)-(val(a.aftermath_index)||-1))
-    .slice(0,10).map(gameCard).join('');
-  wireCards('#ss-feed');
+    '<div class="card" id="confledger">' + confLedgerBody() + '</div>' +
+    '<div class="card" id="crossconf">' + crossConfBody() + '</div>';
+  wireConf();
+}
+
+/* ============================ THE CONFERENCE LEDGER ==============
+   WHY THIS REPLACED A GAME FEED (2026-09-08). The bottom of this page used to be
+   "Season top ten" - ten gameCards, drawn by the same code as The Aftermath and Home.
+   BK's note was correct: those cards already exist in two other places, so the bottom
+   of the archive page was the third serving of the same dish.
+   What the archive page can say that no other page can is the thing you only see once
+   you stop looking at one game: how whole CONFERENCES are actually doing. Two boards:
+   a ledger of every conference, and the non-conference head-to-head, which is the
+   record fans actually argue about and which nothing else here computes. */
+
+/* One game is two sides. Every conference number below is built from sides rather than
+   games, which is the only way a game between two conferences counts once for each. */
+function gameSides(g){
+  const mk = home => ({
+    g, home,
+    teamId: home ? g.home_id : g.away_id,
+    team:   home ? g.home_team : g.away_team,
+    conf:   home ? g.home_conference : g.away_conference,
+    div:    home ? g.home_division : g.away_division,
+    pf:     home ? g.home_points : g.away_points,
+    pa:     home ? g.away_points : g.home_points,
+    oppConf:home ? g.away_conference : g.home_conference,
+    oppDiv: home ? g.away_division : g.home_division,
+    /* cover_result names the side that beat the number. A push or an unpriced game is
+       removed from BOTH halves of the fraction rather than counted as a failure. */
+    covered: g.cover_result === (home ? 'Home covered' : 'Away covered'),
+    priced:  g.cover_result === 'Home covered' || g.cover_result === 'Away covered'
+  });
+  return [mk(true), mk(false)];
+}
+
+const CONF = { div:null, sort:'idx', dir:-1 };
+
+function divisionsPresent(){
+  const set = new Set();
+  DB.games.forEach(g => { if (has(g.home_division)) set.add(g.home_division);
+                          if (has(g.away_division)) set.add(g.away_division); });
+  const order = ['FBS','FCS'];
+  return Array.from(set).sort((a,b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia<0?99:ia) - (ib<0?99:ib) || (a<b?-1:1);
+  });
+}
+
+function confStats(div){
+  const by = new Map();
+  const get = c => {
+    if (!by.has(c)) by.set(c, { conf:c, teams:new Set(), g:0, w:0, l:0, t:0,
+      pf:0, pa:0, ncW:0, ncL:0, atsCov:0, atsN:0, upW:0, upL:0,
+      idxSum:0, idxN:0, best:null });
+    return by.get(c);
+  };
+  DB.games.forEach(game => gameSides(game).forEach(sd => {
+    if (!has(sd.conf)) return;
+    if (div && sd.div !== div) return;
+    const c = get(sd.conf);
+    if (has(sd.teamId)) c.teams.add(sd.teamId);
+    c.g++;
+    const won = sd.pf > sd.pa, lost = sd.pf < sd.pa;
+    if (won) c.w++; else if (lost) c.l++; else c.t++;
+    c.pf += (sd.pf||0); c.pa += (sd.pa||0);
+    if (sd.g.conference_game !== 1){ if (won) c.ncW++; else if (lost) c.ncL++; }
+    if (sd.priced){ c.atsN++; if (sd.covered) c.atsCov++; }
+    /* upset === 1 means the underdog won, so the winner of an upset IS the underdog */
+    if (sd.g.upset === 1){ if (won) c.upW++; else if (lost) c.upL++; }
+    const ix = val(sd.g.aftermath_index);
+    if (ix != null){ c.idxSum += ix; c.idxN++;
+      if (!c.best || ix > val(c.best.aftermath_index)) c.best = sd.g; }
+  }));
+  const out = Array.from(by.values());
+  out.forEach(c => {
+    c.nTeams = c.teams.size;
+    c.winPct = c.g ? Math.round((c.w + c.t*0.5) / c.g * 100) : null;
+    c.ppgF   = c.g ? Math.round(c.pf / c.g * 10) / 10 : null;
+    c.ppgA   = c.g ? Math.round(c.pa / c.g * 10) / 10 : null;
+    c.marg   = c.g ? Math.round((c.pf - c.pa) / c.g * 10) / 10 : null;
+    c.atsPct = c.atsN ? Math.round(c.atsCov / c.atsN * 100) : null;
+    c.idx    = c.idxN ? Math.round(c.idxSum / c.idxN) : null;
+    c.ncN    = c.ncW + c.ncL;
+    c.ncPct  = c.ncN ? Math.round(c.ncW / c.ncN * 100) : null;
+  });
+  return out;
+}
+
+/* key, heading, tooltip, how to read the value, how to sort it */
+const CONF_COLS = [
+  ['conf',  'Conference', 'The conference as the schedule labels it, for the division selected above.', null],
+  ['nTeams','Teams',   'Distinct teams from that conference with at least one game in the archive.', c=>c.nTeams],
+  ['g',     'G',       'Games played by teams of that conference. A conference game counts once for each side, because both sides played it.', c=>c.g],
+  ['rec',   'W-L',     'Overall record across every archived game. Ties count as half a win in the percentage.', c=>c.winPct],
+  ['nc',    'Non-conf','Record against teams from OUTSIDE the conference - the only games that compare one conference with another.', c=>c.ncPct],
+  ['ppgF',  'PPG',     'Points scored per game.', c=>c.ppgF],
+  ['ppgA',  'PPG opp', 'Points allowed per game.', c=>c.ppgA],
+  ['marg',  'Margin',  'Average points scored minus points allowed. Positive means the conference is beating its opposition, not just winning.', c=>c.marg],
+  ['ats',   'ATS',     'Share of priced games in which its teams beat the closing line. Pushes and unpriced games sit out of both halves. A result, never advice.', c=>c.atsPct],
+  ['ups',   'Upsets',  'Upsets won minus upsets suffered - an upset is a game the underdog took, so winning them is a compliment and conceding them is not.', c=>(c.upW-c.upL)],
+  ['idx',   'Tux Index','MEAN Aftermath Index of every game its teams played. This is the entertainment column, and it is the one the table sorts on by default.', c=>c.idx]
+];
+
+function confLedgerBody(){
+  const divs = divisionsPresent();
+  if (CONF.div === null) CONF.div = divs.indexOf('FBS') >= 0 ? 'FBS' : (divs[0] || '');
+  const stats = confStats(CONF.div);
+  /* A conference on one or two games is noise. The floor rises with the archive rather
+     than being a magic number that is wrong in September and wrong again in November. */
+  const floor = DB.weeks.length >= 4 ? 6 : 2;
+  const shown = stats.filter(c => c.g >= floor);
+  const col = CONF_COLS.find(c => c[0]===CONF.sort) || CONF_COLS[10];
+  const key = col[3] || (c=>c.conf);
+  shown.sort((a,b) => {
+    const va = key(a), vb = key(b);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;           /* blanks sort last, always */
+    if (vb == null) return -1;
+    if (typeof va === 'string') return CONF.dir * (va < vb ? -1 : va > vb ? 1 : 0);
+    return CONF.dir * (va - vb) || (b.g - a.g);
+  });
+
+  const sel = '<label class="fl">Division<select id="cf-div" title="Conferences are only comparable inside a division. FBS is the complete picture; the others are a filtered sample - see the note under the table.">' +
+    divs.map(d => '<option value="'+esc(d)+'"'+(CONF.div===d?' selected':'')+'>'+esc(d)+'</option>').join('') +
+    '</select></label>';
+
+  const th = CONF_COLS.map(([k,lab,tip]) =>
+    '<th class="' + (k==='conf'?'l ':'') + 'sortable' + (CONF.sort===k?' sorted':'') + '" data-k="'+k+'"' +
+    ' title="'+esc(tip)+' Click to sort.">' + esc(lab) +
+    (CONF.sort===k ? '<i>' + (CONF.dir<0?'▾':'▴') + '</i>' : '') + '</th>').join('');
+
+  const rec = c => c.w + '-' + c.l + (c.t ? '-' + c.t : '');
+  const body = shown.length ? shown.map(c =>
+    '<tr class="crow" data-conf="'+esc(c.conf)+'" role="button" tabindex="0"' +
+      ' title="Open ' + esc(c.conf) + ' and see which of its teams produced these numbers.">' +
+      '<td class="l"><span class="chev" aria-hidden="true">&rsaquo;</span><b>'+esc(c.conf)+'</b>' +
+        (c.best ? '<span class="dim tiny cbest" title="The best game its teams played, by Aftermath Index.">' +
+                  'best: ' + esc(c.best._matchup) + '</span>' : '') + '</td>' +
+      '<td>'+c.nTeams+'</td>' +
+      '<td>'+c.g+'</td>' +
+      '<td><b>'+rec(c)+'</b><span class="dim tiny"> '+(c.winPct==null?dash:c.winPct+'%')+'</span></td>' +
+      '<td>'+(c.ncN ? c.ncW+'-'+c.ncL+'<span class="dim tiny"> '+c.ncPct+'%</span>' : dash)+'</td>' +
+      '<td>'+(c.ppgF==null?dash:c.ppgF)+'</td>' +
+      '<td>'+(c.ppgA==null?dash:c.ppgA)+'</td>' +
+      '<td class="'+(c.marg>0?'pos':(c.marg<0?'neg':''))+'">'+(c.marg==null?dash:(c.marg>0?'+':'')+c.marg)+'</td>' +
+      '<td>'+(c.atsN ? c.atsCov+'-'+(c.atsN-c.atsCov)+'<span class="dim tiny"> '+c.atsPct+'%</span>' : dash)+'</td>' +
+      '<td class="'+((c.upW-c.upL)>0?'pos':((c.upW-c.upL)<0?'neg':''))+'" title="'+c.upW+' won, '+c.upL+' suffered">' +
+        ((c.upW-c.upL)>0?'+':'')+(c.upW-c.upL)+'</td>' +
+      '<td class="wi">'+mbar(c.idx, 100, c.conf + ': mean Aftermath Index ' +
+        (c.idx==null?'not yet computed':c.idx + ' out of 100') + ' across ' + c.idxN + ' game' +
+        (c.idxN===1?'':'s'))+'</td>' +
+    '</tr>').join('')
+    : '<tr><td class="l" colspan="'+CONF_COLS.length+'"><span class="dim tiny">No conference in ' +
+      esc(CONF.div) + ' has ' + floor + ' games in the archive yet.</span></td></tr>';
+
+  const biased = CONF.div !== 'FBS';
+  return '<h3 class="qh">The conference ledger <span>' + esc(CONF.div) +
+      ' &middot; every conference, sorted by ' + esc((col[1]||'').toLowerCase()) + '</span></h3>' +
+    confLede(shown) +
+    '<p class="sub" style="margin:8px 0 0">One row per conference, built from <b>sides rather than games</b> - ' +
+      'a conference game counts once for each team in it, because both of them played it. Click any heading ' +
+      'to sort. It opens on <b>Tux Index</b> rather than on wins, because this is the page that asks which ' +
+      'football was worth watching, and a 9-0 conference that scored 17 points a week did not answer that.</p>' +
+    '<div class="hint" style="margin:12px 0 11px"><span class="k">Tip</span><div>Click any ' +
+      '<b>conference row</b> to open its teams in a side panel - who played, what they did, and how far ' +
+      'each of them sits above or below the conference average on every column here.</div></div>' +
+    '<div class="filters" style="margin:0 0 11px">' + sel + '</div>' +
+    '<div class="tablewrap"><table class="wks conf"><thead><tr>' + th + '</tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
+    '<p class="sub tiny" style="margin-top:11px">A conference needs <b>' + floor + ' games</b> to appear, ' +
+      'and that floor rises as the archive deepens so one loud Saturday stops being a whole season.' +
+      (biased ? ' <b>Read ' + esc(CONF.div) + ' with care.</b> Only FBS is recapped in full. An ' +
+        esc(CONF.div) + ' game enters this archive only when it was ranked, a rivalry, or decided by seven ' +
+        'or fewer, so these rows are a sample of the good games rather than the whole schedule - which ' +
+        'flatters close teams and hides blowouts in both directions.'
+              : ' FBS is recapped in full, so these rows are the complete picture for this division.') +
+    '</p>';
+}
+
+/* The page already opens by naming the best week in a sentence. The ledger gets the
+   same treatment: a table is an answer you have to read, a sentence is one you are
+   handed. Both claims are recomputed from the rows on screen, so the division filter
+   and the min-games floor apply to the sentence too - it can never disagree with the
+   table underneath it. */
+function confLede(shown){
+  if (!shown.length) return '';
+  const byIdx = shown.filter(c => c.idx != null).sort((a,b)=>b.idx-a.idx)[0];
+  const byNc  = shown.filter(c => c.ncN >= 2).sort((a,b)=>
+    (b.ncPct-a.ncPct) || (b.ncN-a.ncN))[0];
+  const bits = [];
+  if (byIdx) bits.push('Best football to watch: <b>' + esc(byIdx.conf) + '</b> at ' + byIdx.idx +
+    (byIdx.best ? ', on the strength of ' + esc(byIdx.best._matchup) : '') + '.');
+  if (byNc && (!byIdx || byNc.conf !== byIdx.conf || byNc.ncN >= 2))
+    bits.push('Best outside its own house: <b>' + esc(byNc.conf) + '</b> at ' +
+      byNc.ncW + '-' + byNc.ncL + ' against everybody else.');
+  if (!bits.length) return '';
+  return '<p class="sub" style="margin:9px 0 0">' + bits.join(' ') + '</p>';
+}
+
+/* ---- non-conference head to head ----
+   The one number a conference cannot argue with, because it was decided on the field
+   against somebody else. */
+function crossConfBody(){
+  const pairs = new Map();
+  DB.games.forEach(g => {
+    if (g.conference_game === 1) return;
+    const hc = g.home_conference, ac = g.away_conference;
+    if (!has(hc) || !has(ac) || hc === ac) return;
+    if (CONF.div && !(g.home_division === CONF.div || g.away_division === CONF.div)) return;
+    const winC = g.home_points > g.away_points ? hc : (g.away_points > g.home_points ? ac : null);
+    const [a, b] = [hc, ac].sort();
+    const k = a + ' | ' + b;
+    if (!pairs.has(k)) pairs.set(k, { a, b, aw:0, bw:0, tie:0, n:0, idxSum:0, idxN:0, top:null });
+    const p = pairs.get(k);
+    p.n++;
+    if (winC === a) p.aw++; else if (winC === b) p.bw++; else p.tie++;
+    const ix = val(g.aftermath_index);
+    if (ix != null){ p.idxSum += ix; p.idxN++; if (!p.top || ix > val(p.top.aftermath_index)) p.top = g; }
+  });
+  const list = Array.from(pairs.values())
+    .sort((x,y) => (y.n - x.n) || (Math.abs(y.aw-y.bw) - Math.abs(x.aw-x.bw)))
+    .slice(0, 14);
+
+  const rows = list.map(p => {
+    const lead = p.aw === p.bw ? null : (p.aw > p.bw ? p.a : p.b);
+    const rec  = p.aw + '-' + p.bw + (p.tie ? '-' + p.tie : '');
+    const idx  = p.idxN ? Math.round(p.idxSum / p.idxN) : null;
+    return '<div class="h2hrow">' +
+      '<span class="side' + (lead===p.a?' lead':'') + '">' + esc(p.a) + '</span>' +
+      '<span class="rec" title="' + esc(p.a + ' ' + p.aw + ', ' + p.b + ' ' + p.bw +
+        (p.tie ? ', ' + p.tie + ' tied' : '')) + '">' + esc(rec) + '</span>' +
+      '<span class="side r' + (lead===p.b?' lead':'') + '">' + esc(p.b) + '</span>' +
+      mbar(idx, 100, idx==null ? 'No Aftermath Index across these meetings'
+                               : 'Mean Aftermath Index ' + idx + ' over ' + p.n + ' meeting' + (p.n===1?'':'s')) +
+      '<span class="topg" title="The best of these meetings, by Aftermath Index.">' +
+        (p.top ? esc(p.top._matchup) : '') + '</span>' +
+    '</div>';
+  }).join('');
+
+  return '<h3 class="qh">Across the aisle <span>non-conference only &middot; ' + esc(CONF.div) +
+      ' &middot; most-played pairings first</span></h3>' +
+    '<p class="sub" style="margin:8px 0 12px">Conference records are mostly a conference beating itself. ' +
+      'These are the games that crossed the line: every pairing that has actually met, who won them, and ' +
+      'how good the meetings were. The bolder name leads the series. Only pairings involving <b>' +
+      esc(CONF.div) + '</b> are shown, and the division picker above controls this board too.</p>' +
+    (list.length
+      ? '<div class="h2hhead"><span></span><span>Record</span><span></span><span>Mean Aftermath</span>' +
+        '<span>Best meeting</span></div><div class="h2h">' + rows + '</div>'
+      : '<div class="emptystate"><b>No non-conference pairing in ' + esc(CONF.div) + ' yet.</b><br>' +
+        'Conferences mostly play themselves once the season settles in, so this board is at its fullest ' +
+        'in September and grows quiet after.</div>');
+}
+
+function wireConf(){
+  const d = $('#cf-div');
+  if (d) d.onchange = () => { CONF.div = d.value; redrawConf(); };
+  /* A ledger row is a summary of a dozen teams. Clicking it opens the drawer on the
+     BREAKDOWN, because "the Big Ten is at 63" is the start of a question, not an
+     answer - the reader wants to know which of its teams got it there. */
+  $$('#confledger tr.crow').forEach(tr => {
+    const open = () => openConference(tr.dataset.conf);
+    tr.onclick = open;
+    tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } };
+  });
+  $$('#confledger th.sortable').forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    if (CONF.sort === k) CONF.dir = -CONF.dir;
+    else { CONF.sort = k; CONF.dir = (k === 'conf') ? 1 : -1; }
+    redrawConf();
+  });
+}
+function redrawConf(){
+  const a = $('#confledger'), b = $('#crossconf');
+  if (a) a.innerHTML = confLedgerBody();
+  if (b) b.innerHTML = crossConfBody();
+  wireConf();
 }
 
 /* ============================ UNDER THE COUCH ==================== */
@@ -2674,6 +3381,141 @@ function renderCouch(el){
     '</div>';
 }
 
+/* ---------- 5b. drawer: one conference, broken into its teams -----
+   The ledger answers "which conference". This answers "on whose account", which is
+   the next question every time. Same arithmetic, one level down: every number here is
+   built from the same gameSides() the ledger uses, so a column can never disagree
+   with the row that opened it. The last column is the one that makes it worth doing -
+   each team's distance from its OWN conference's average, which is the literal
+   answer to "how did they contribute to that number". */
+function confTeamStats(conf, div){
+  const by = new Map();
+  DB.games.forEach(game => gameSides(game).forEach(sd => {
+    if (sd.conf !== conf) return;
+    if (div && sd.div !== div) return;
+    const id = has(sd.teamId) ? sd.teamId : ('n:' + sd.team);
+    if (!by.has(id)) by.set(id, { id, name:sd.team, g:0, w:0, l:0, t:0, pf:0, pa:0,
+      ncW:0, ncL:0, atsCov:0, atsN:0, upW:0, upL:0, idxSum:0, idxN:0, best:null });
+    const t = by.get(id);
+    t.g++;
+    const won = sd.pf > sd.pa, lost = sd.pf < sd.pa;
+    if (won) t.w++; else if (lost) t.l++; else t.t++;
+    t.pf += (sd.pf||0); t.pa += (sd.pa||0);
+    if (sd.g.conference_game !== 1){ if (won) t.ncW++; else if (lost) t.ncL++; }
+    if (sd.priced){ t.atsN++; if (sd.covered) t.atsCov++; }
+    if (sd.g.upset === 1){ if (won) t.upW++; else if (lost) t.upL++; }
+    const ix = val(sd.g.aftermath_index);
+    if (ix != null){ t.idxSum += ix; t.idxN++;
+      if (!t.best || ix > val(t.best.aftermath_index)) t.best = sd.g; }
+    if (!t.meta) t.meta = teamMeta(sd.teamId, sd.team, conf);
+  }));
+  const out = Array.from(by.values());
+  out.forEach(t => {
+    t.ppgF = t.g ? Math.round(t.pf / t.g * 10) / 10 : null;
+    t.ppgA = t.g ? Math.round(t.pa / t.g * 10) / 10 : null;
+    t.marg = t.g ? Math.round((t.pf - t.pa) / t.g * 10) / 10 : null;
+    t.atsPct = t.atsN ? Math.round(t.atsCov / t.atsN * 100) : null;
+    t.idx  = t.idxN ? Math.round(t.idxSum / t.idxN) : null;
+    t.ncN  = t.ncW + t.ncL;
+  });
+  return out;
+}
+
+function openConference(conf){
+  const div = CONF.div;
+  const c = confStats(div).find(x => x.conf === conf);
+  const teams = confTeamStats(conf, div);
+  if (!c || !teams.length) return;
+  /* inherit the ledger's sort where it maps onto a team, so the drawer opens ordered
+     the way the reader was already looking at the table */
+  const teamKey = { idx:t=>t.idx, ppgF:t=>t.ppgF, ppgA:t=>t.ppgA, marg:t=>t.marg,
+                    g:t=>t.g, rec:t=>(t.g?(t.w+t.t*0.5)/t.g:null), ats:t=>t.atsPct,
+                    ups:t=>(t.upW-t.upL), nc:t=>(t.ncN?t.ncW/t.ncN:null),
+                    nTeams:t=>t.g, conf:t=>t.name };
+  const key = teamKey[CONF.sort] || teamKey.idx;
+  teams.sort((a,b) => {
+    const va = key(a), vb = key(b);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'string') return CONF.dir * (va < vb ? -1 : va > vb ? 1 : 0);
+    return CONF.dir * (va - vb) || (b.g - a.g);
+  });
+  const sortLab = (CONF_COLS.find(x => x[0] === CONF.sort) || CONF_COLS[10])[1];
+
+  const stat = (v, lab, tip) => '<div class="cstat" title="' + esc(tip||'') + '">' +
+    '<b>' + v + '</b><span>' + esc(lab) + '</span></div>';
+  const dlt = (v, dp) => v == null ? '<span class="dim">' + dash + '</span>' :
+    '<span class="' + (v > 0 ? 'pos' : v < 0 ? 'neg' : 'dim') + '">' +
+    (v > 0 ? '+' : '') + (dp ? Math.round(v*10)/10 : v) + '</span>';
+
+  const rows = teams.map(t => {
+    const m = t.meta || teamMeta(t.id, t.name, conf);
+    return '<tr>' +
+      '<td class="l">' + logoChip(m.logo, 'sm', t.name, m.color, m.textOn) +
+        '<span class="tn">' + esc(t.name) + '</span>' +
+        (t.best ? '<span class="dim tiny cbest">best: ' + esc(t.best._matchup) + '</span>' : '') + '</td>' +
+      '<td>' + t.g + '</td>' +
+      '<td><b>' + t.w + '-' + t.l + (t.t ? '-' + t.t : '') + '</b></td>' +
+      '<td>' + (t.ncN ? t.ncW + '-' + t.ncL : dash) + '</td>' +
+      '<td>' + (t.ppgF == null ? dash : t.ppgF) + '</td>' +
+      '<td>' + (t.ppgA == null ? dash : t.ppgA) + '</td>' +
+      '<td>' + dlt(t.marg, 1) + '</td>' +
+      '<td>' + (t.atsN ? t.atsCov + '-' + (t.atsN - t.atsCov) : dash) + '</td>' +
+      '<td>' + dlt(t.upW - t.upL) + '</td>' +
+      '<td class="wi">' + (t.idx == null ? dash : t.idx) + '</td>' +
+      '<td>' + dlt(t.idx == null || c.idx == null ? null : t.idx - c.idx) + '</td>' +
+      '<td>' + (t.best ? '<button class="mini game" data-gid="' + t.best.game_id + '"' +
+        ' title="Open the box score for ' + esc(t.best._matchup) + '">box</button>' : '') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  $('#drawer-body').innerHTML =
+    '<div class="eyebrow">' + esc(div) + ' &middot; conference breakdown</div>' +
+    '<div style="font-size:22px;font-weight:900;margin:4px 0 3px">' + esc(conf) + '</div>' +
+    '<div class="tiny dim" style="margin-bottom:13px">' + teams.length + ' team' +
+      (teams.length === 1 ? '' : 's') + ' with a game in the archive &middot; sorted by ' +
+      esc(String(sortLab).toLowerCase()) + ', the same column the ledger is sorted on</div>' +
+    '<div class="cstats">' +
+      stat(c.g, 'games', 'Side-appearances: a conference game counts once for each of its teams.') +
+      stat(c.w + '-' + c.l + (c.t ? '-' + c.t : ''), 'record', 'Overall, every archived game.') +
+      stat(c.ncN ? c.ncW + '-' + c.ncL : dash, 'non-conf', 'Against teams from outside the conference.') +
+      stat((c.marg > 0 ? '+' : '') + (c.marg == null ? dash : c.marg), 'margin', 'Average points scored minus allowed.') +
+      stat(c.idx == null ? dash : c.idx, 'Tux Index', 'Mean Aftermath Index of every game its teams played. The column below is measured against this number.') +
+    '</div>' +
+    '<h3 class="qh" style="margin:17px 0 8px">Who produced it</h3>' +
+    '<p class="sub tiny" style="margin:0 0 10px">Every column is built from the same sides the ledger ' +
+      'uses, so these rows add up to the row you clicked. <b>vs conf</b> is the last word: how far that ' +
+      'team sits above or below <b>' + esc(conf) + '</b>&rsquo;s own average of ' +
+      (c.idx == null ? dash : c.idx) + ' on the Tux Index. A team can win every week and still drag ' +
+      'the number down.</p>' +
+    '<div class="tablewrap"><table class="wks cteam"><thead><tr>' +
+      '<th class="l">Team</th>' +
+      '<th title="Games played by this team in the archive.">G</th>' +
+      '<th title="Its record across those games.">W-L</th>' +
+      '<th title="Its record against teams from outside this conference.">Non-conf</th>' +
+      '<th title="Points scored per game.">PPG</th>' +
+      '<th title="Points allowed per game.">PPG opp</th>' +
+      '<th title="Average points scored minus allowed.">Margin</th>' +
+      '<th title="Priced games in which it beat the closing line. Pushes and unpriced games sit out.">ATS</th>' +
+      '<th title="Upsets won minus upsets suffered.">Upsets</th>' +
+      '<th title="Mean Aftermath Index of its own games.">Tux</th>' +
+      '<th title="Its Tux Index minus the conference average. This is its contribution to the number in the ledger.">vs conf</th>' +
+      '<th></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (div !== 'FBS'
+      ? '<p class="sub tiny" style="margin-top:11px">Only FBS is recapped in full, so an ' + esc(div) +
+        ' team appears here only for the games that made the archive - ranked, a rivalry, or decided by ' +
+        'seven or fewer. Read these rows as a sample of that team&rsquo;s good games, not its season.</p>'
+      : '<p class="sub tiny" style="margin-top:11px">FBS is recapped in full, so this is every game ' +
+        'these teams have played.</p>');
+  wireCards('#drawer-body');
+  $('#drawer').classList.add('wide');
+  $('#drawer').classList.add('on'); $('#drawer').setAttribute('aria-hidden','false');
+  $('#scrim').classList.add('on');
+  $('#drawer').scrollTop = 0;
+}
+
 /* ---------- 5. drawer: one game in full --------------------------- */
 function openGame(gid){
   const g = DB.games.find(x=>x.game_id===gid);
@@ -2735,6 +3577,10 @@ function openGame(gid){
     (has(r.recap_body) ? TUX_NOTE.replace('class="tuxnote"',
         'class="tuxnote" style="margin-top:16px"') : '') +
     '<p class="tiny dim" style="margin-top:12px">Gamble Responsibly. 18+.</p>';
+  /* the game drawer is the narrow one - drop the conference width if it is still on
+     from a previous open, including the case where a team's box button swapped the
+     contents of an already-open conference panel */
+  $('#drawer').classList.remove('wide');
   $('#drawer').classList.add('on'); $('#drawer').setAttribute('aria-hidden','false');
   $('#scrim').classList.add('on');
   $('#drawer').scrollTop = 0;

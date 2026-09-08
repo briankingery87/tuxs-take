@@ -62,16 +62,24 @@ const RESULTS = [
          excitement_index:PH.r, excitement_pctile:PH.n, aftermath_index:38,
          index_why:'drama 74, stakes 45 (4 of 7 components had data)', home_id:103 }),
   /* overtime: five periods */
+  /* the only game in the fixture that actually SETTLES against the spread. Every
+     other one is a Push or unpriced, so without this the conference ledger's ATS
+     column was permanently a dash and the arithmetic went untested. */
   game({ game_id:5, home_team:'Overtime U', away_team:'Free Football St',
          home_line_scores:'7^7^7^7^6', away_line_scores:'7^7^7^7^0',
          home_points:34, away_points:28, total_points:62, margin:6, went_ot:1,
+         cover_result:'Home covered', ou_result:'Over', fav_covered:1,
          aftermath_index:79, home_id:104 }),
-  /* neutral site: capacity, city and travel deliberately blank */
+  /* neutral site: capacity, city and travel deliberately blank. Also the first
+     NON-CONFERENCE game in the fixture - the conference ledger's head-to-head board
+     has nothing to compute without one, and every game used to be conference_game:1. */
   game({ game_id:6, home_team:'Neutral Home', away_team:'Neutral Away', neutral_site:1,
          capacity:PH.n, pct_capacity:PH.n, host_city:PH.s, host_state:PH.s,
+         conference_game:0,
          road_miles:PH.f, aftermath_index:66, home_id:105 }),
   /* home team with no coordinates - must not break the map */
   game({ game_id:7, home_team:'Nowhere College', away_team:'Off Grid U', home_id:999,
+         conference_game:0,
          aftermath_index:23, margin:35, home_points:45, away_points:10, one_score:0,
          comeback:0, total_points:55, home_line_scores:'14^14^10^7', away_line_scores:'3^0^7^0' }),
   /* previous week, so the week selector has something to switch to */
@@ -93,8 +101,41 @@ const RECAPS = RESULTS.map((g,i)=>({
   style_version:'1.1', gen_status: i===2 ? 'template' : 'voiced',
   recap_generated: Date.parse('2026-08-27T05:00:00Z'), aftermath_index:g.aftermath_index
 }));
-const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
-  team_id:id, latitude:33+i*1.6, longitude:-97+i*2.1 }));
+/* Teams now carries name / conference / logo as well, because the Top 25 in poll mode
+   has to name a team that is RANKED BUT HAS NO ARCHIVED GAME. Team 700 is exactly that
+   case: it exists in Teams, it is ranked, and it never played. */
+const TEAMS = [100,101,102,103,104,105,106,700].map((id,i)=>({
+  team_id:id, latitude:33+i*1.6, longitude:-97+i*2.1,
+  school: id===700 ? 'Bye Week Poly' : 'Team '+id,
+  mascot:'Testers', conference: i%2 ? 'Big Test' : 'Test American',
+  division:'FBS', logo_url:PH.s, primary_color:'#0021A5', text_color:'#FFFFFF' }));
+
+/* Two poll snapshots so the movement arrows and the week picker both have something
+   real to do: week 12 is the current one, week 11 is what it moved from. A poll ranks
+   25 teams but the fixture only has eight, so the rest of the ranks are filled with
+   ids that are in NEITHER Teams nor the archive - the ugliest case, and the board has
+   to render it without a blank row or a crash. */
+function pollRows(week, poll, order){
+  return order.map((id, i) => ({
+    season:2025, week, poll, rank:i+1, team_id:id,
+    school: id===700 ? 'Bye Week Poly' : 'Team '+id,
+    conference: i%2 ? 'Big Test' : 'Test American',
+    points: 1500 - i*40, first_votes: i===0 ? 52 : 0 }));
+}
+/* 200 is the AWAY team in game 1 and it LOST, so the board has to show a loss as well
+   as a win. It is also absent from the Teams fixture on purpose, which exercises the
+   fall back to the name the poll row itself carries. 106 only played in week 11, so in
+   a week-12 poll it is a ranked team with no game that week - a third distinct case. */
+const ORDER_W12 = [101,100,700,104,105,102,103,200,106,801,802,803,804,805,806,807,
+                   808,809,810,811,812,813,814,815,816];
+const ORDER_W11 = [100,101,104,700,102,105,200,103,106,801,802,803,804,805,806,807,
+                   808,809,810,811,812,813,814,815,816];
+const RANKINGS = [].concat(
+  pollRows(12,'AP Top 25', ORDER_W12),
+  pollRows(11,'AP Top 25', ORDER_W11),
+  pollRows(12,'Coaches Poll', ORDER_W12),
+  pollRows(12,'AFCA Division III Coaches Poll', ORDER_W12)
+);
 
 (async () => {
   const browser = await chromium.launch({ executablePath: BROWSER });
@@ -108,7 +149,12 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
     const u = route.request().url();
     const body = route.request().postData() || '';
     const off = +((body.match(/resultOffset=(\d+)/) || [])[1] || 0);
-    let data = /CFB_Atlas_Teams/.test(u) ? TEAMS
+    /* ORDER MATTERS. CFB_Atlas_Stats/FeatureServer/1 is Rankings and
+       CFB_Atlas_Recaps/FeatureServer/1 is GameRecaps - the old router tested only the
+       sublayer number, so the rankings query was answered with recap rows. Match the
+       SERVICE first, the sublayer second. */
+    let data = /CFB_Atlas_Stats/.test(u) ? RANKINGS
+             : /CFB_Atlas_Teams/.test(u) ? TEAMS
              : /FeatureServer\/1\//.test(u) ? RECAPS : RESULTS;
     const slice = off === 0 ? data : [];
     route.fulfill({ contentType:'application/json', body: JSON.stringify({
@@ -179,25 +225,102 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
         'sibling order is Experience, Ask the Atlas, Tux: ' + sibs.join(' | '));
   check(await page.locator('#m-home .sib.youarehere h4').count() === 1, 'Tux card is flagged "you are here"');
 
-  /* the week's board - Home answers "what happened" before a page is chosen */
-  const brows = await page.locator('#m-home .brow').count();
+  /* ---- the Top 25, POLL MODE (the default) ------------------------------
+     Two boards share one grid, so both get tested: the poll first because that is
+     what a first-time visitor sees, then Tux's own after switching the picker. */
+  check(await page.locator('#top25').count() === 1, 'the Top 25 board is its own addressable card');
+  const t25head = (await page.textContent('#top25 .qh')) || '';
+  check(/The Top 25/.test(t25head) && /AP Top 25/.test(t25head),
+        'the board opens on the AP poll: ' + t25head.replace(/\s+/g,' ').trim().slice(0,90));
+  const pollOpts = await page.locator('#tp-poll option').allTextContents();
+  /* the fixture publishes AP, Coaches and D3. The Coaches Poll is hidden on purpose -
+     it is a near-duplicate of the AP for the same division - so three options remain. */
+  check(pollOpts.length === 3, 'the picker offers one poll per division plus Tux (got ' + pollOpts.length + ')');
+  check(!/Coaches Poll \(FBS\)/.test(pollOpts.join(' | ')),
+        'the FBS Coaches Poll is not offered: ' + pollOpts.join(' | '));
+  check(/Tux/.test(pollOpts[pollOpts.length-1] || ''),
+        'Tux sorts last, after the real polls: ' + pollOpts.join(' | '));
+  check(/Division III/.test(pollOpts.join(' ')), 'the D3 coaches poll is selectable');
+  check(await page.locator('#tp-week option').count() === 2,
+        'the week filter lists every snapshot that poll has published');
+  const prows = await page.locator('#top25 .brow').count();
+  check(prows === 25, 'a poll board is 25 rows even when the archive is shorter (got ' + prows + ')');
+  /* the fixture ranks 17 teams that never played - those rows must render, not crash,
+     and must say WHY there is nothing to open */
+  check(await page.locator('#top25 .brow.noop').count() === 18,
+        'ranked teams with no archived game are greyed rather than blank (got ' +
+        (await page.locator('#top25 .brow.noop').count()) + ')');
+  check(await page.locator('#top25 .brow.noop[disabled]').count() === 18,
+        'and they are not clickable');
+  const noGame = await page.locator('#top25 .brow.noop .hl.none').first().textContent();
+  check(/No archived game/.test(noGame || ''), 'the empty result says what it means: ' + (noGame||'').trim());
+  const pres = await page.locator('#top25 .pres').allTextContents();
+  check(pres.length === 7, 'every ranked team WITH a game shows its result (got ' + pres.length + ')');
+  check(/beat|lost to|tied/.test(pres[0] || ''), 'the result is in words, not just a score: ' + (pres[0]||'').trim());
+  check(await page.locator('#top25 .pres.w').count() >= 1 && await page.locator('#top25 .pres.l').count() >= 1,
+        'wins and losses are told apart');
+  /* movement: team 101 was 1st this week and 2nd last week, so it must read as up 1 */
+  const mv = await page.locator('#top25 .brow').first().locator('.mv').first();
+  check(/1/.test((await mv.textContent()) || '') && (await mv.getAttribute('class') || '').includes('up'),
+        'rank movement against the previous poll: ' + ((await mv.textContent())||'').trim());
+  check(await page.locator('#top25 .mv.dn').count() >= 1, 'and a faller is marked too');
+  check(await page.locator('#top25 .brow .cf').count() === 25, 'every row names the conference');
+  /* NO BLANK CRESTS. The fixture gives almost every team logo_url 'N/A', which is what
+     the live service holds for most of Division II and III, so this is the real case. */
+  check(await page.locator('#top25 .lchip.empty').count() === 0,
+        'no row falls back to an empty chip');
+  const marks = await page.locator('#top25 .lchip.mark img').count();
+  check(marks >= 20, 'unlogo\'d teams draw a monogram instead (got ' + marks + ')');
+  const markSrc = await page.locator('#top25 .lchip.mark img').first().getAttribute('src');
+  check(/^data:image\/svg\+xml/.test(markSrc || ''),
+        'the monogram is an inline SVG, so it needs no network: ' + (markSrc||'').slice(0,34));
+  check(/%3Ctext/.test(markSrc || ''), 'and it carries initials rather than being a grey box');
+  const marked = await page.locator('#top25 .lchip.mark[title]').count();
+  check(marked === marks, 'every monogram names its team on hover');
+  check(await page.locator('#top25 .tuxnote').count() === 0, 'the poll board stays clean too');
+  await page.click('#top25 .brow.game');
+  await page.waitForTimeout(250);
+  check(await page.locator('#drawer.on').count() === 1, 'a poll row with a game opens the box score drawer');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
+  /* switching the week must repaint the board in place, not reload the page */
+  await page.selectOption('#tp-week', { index: 1 });
+  await page.waitForTimeout(200);
+  check(await page.locator('#top25 .brow').count() === 25, 'the week filter redraws the board');
+  check(await page.locator('#top25 .mv.new').count() === 25,
+        'the first poll of a season shows every team as new, because there is nothing to move from');
+  await page.selectOption('#tp-week', { index: 0 });
+  await page.waitForTimeout(200);
+
+  /* ---- the Top 25, TUX MODE (what the board used to be, unchanged) ------ */
+  await page.selectOption('#tp-poll', '__tux');
+  await page.waitForTimeout(250);
+  const tuxHead = (await page.textContent('#top25 .qh')) || '';
+  check(/Tux’s Top 25|Tux.s Top 25/.test(tuxHead), 'Tux mode renames the board: ' +
+        tuxHead.replace(/\s+/g,' ').trim().slice(0,70));
+  const brows = await page.locator('#top25 .brow').count();
   check(brows === 7, 'home Top 25 lists the whole latest week when it is short of 25 (got ' + brows + ')');
-  const bIdx = await page.locator('#m-home .brow .mbar b').allTextContents();
+  const bIdx = await page.locator('#top25 .brow .mbar b').allTextContents();
   check((bIdx[0]||'').trim() === '88',
         'board is ranked by the Aftermath Index, best first: ' + (bIdx[0]||'').trim());
-  check(await page.locator('#m-home .brow .tgrade').count() >= 6, 'board shows the Tux grade on each row');
+  check(await page.locator('#top25 .brow .tgrade').count() >= 6, 'board shows the Tux grade on each row');
   check(await page.locator('#m-home .tuxnote').count() === 0, 'the home board stays clean too');
   /* the wide gutter between the score and the bar now carries Tux's headline */
-  const hls = await page.locator('#m-home .brow .hl').allTextContents();
+  const hls = await page.locator('#top25 .brow .hl').allTextContents();
   check(hls.length === 7, 'every board row has a headline cell (got ' + hls.length + ')');
   check(/TEST HEADLINE FOR GAME 2/.test(hls[0] || ''),
         'the headline shown is the recap headline for that game: ' + (hls[0]||'').trim());
-  check(await page.locator('#m-home .brow .hl[title]').count() === 7,
+  check(await page.locator('#top25 .brow .hl[title]').count() === 7,
         'the full headline is available as a tooltip when it clamps');
-  const clamp = await page.evaluate(() => getComputedStyle(document.querySelector('#m-home .brow .hl')).webkitLineClamp);
+  const clamp = await page.evaluate(() => getComputedStyle(document.querySelector('#top25 .brow .hl')).webkitLineClamp);
   check(clamp === '2', 'a long headline wraps to two lines instead of stretching the row');
-  check(await page.locator('#m-home .brow .pill.angle').count() >= 6, 'board shows the recap angle on each row');
-  check(/Tux\u2019s Top 25|Tux.s Top 25/.test(hTxt), 'the board is a named Top 25');
+  check(await page.locator('#top25 .brow .pill.angle').count() >= 6, 'board shows the recap angle on each row');
+  check(await page.locator('#tp-week option').count() === 2,
+        'Tux mode swaps the week filter to the archive weeks');
+  await page.selectOption('#tp-poll', 'AP Top 25');
+  await page.waitForTimeout(250);
+  check(await page.locator('#top25 .brow').count() === 25, 'and switching back restores the poll');
   /* the board sits at the BOTTOM of home and the tip sits at the TOP of the board */
   const order = await page.evaluate(() => {
     const kids = Array.from(document.querySelectorAll('#m-home > *'));
@@ -499,9 +622,111 @@ const TEAMS = [100,101,102,103,104,105,106].map((id,i)=>({
   check(/over 1 game/.test(sTxt2), 'the leaderboard sub-label says what the count is');
   check(/covered \d+ of \d+/.test(sTxt2) || /Not enough of the season/.test(sTxt2),
         'the ATS sub-label says what the fraction is');
-  check(await page.locator('#m-season .feed').count() === 1, 'Long Season uses the same .feed as Q1');
-  check(await page.evaluate(() => !document.querySelector('#m-season .card .feed')),
-        'the Q4 game feed sits outside a card, exactly as it does on Q1');
+  /* ---- the conference ledger, which replaced the Season top ten game feed ----
+     The old assertion here was that Q4 ended in a .feed of gameCards. It deliberately
+     does not any more: those cards are already on Home and on The Aftermath, so the
+     bottom of the archive page was the third serving of one dish. */
+  check(await page.locator('#m-season .feed').count() === 0,
+        'Q4 no longer repeats the game cards that Home and Q1 already show');
+  check(await page.locator('#confledger').count() === 1, 'the conference ledger is its own card');
+  check(await page.locator('#crossconf').count() === 1, 'the non-conference head-to-head is its own card');
+  const cfHead = await page.locator('#confledger th').allTextContents();
+  check(cfHead.length === 11, 'the ledger has eleven columns (got ' + cfHead.length + ')');
+  check(/Conference/.test(cfHead[0]) && /Tux Index/.test(cfHead[10]),
+        'it runs conference to Tux Index: ' + cfHead.join(' | '));
+  check(await page.locator('#confledger th.sortable').count() === 11, 'every column sorts');
+  check(await page.locator('#confledger th.sorted').count() === 1, 'exactly one column is the active sort');
+  const sorted0 = await page.locator('#confledger th.sorted').textContent();
+  check(/Tux Index/.test(sorted0 || ''), 'and it opens on Tux Index: ' + (sorted0||'').trim());
+  const cfRows = await page.locator('#confledger tbody tr').count();
+  check(cfRows >= 2, 'the fixture produces more than one conference row (got ' + cfRows + ')');
+  /* the entertainment column must be the SHARED bar, not a bespoke one */
+  check(await page.locator('#confledger tbody .mbar').count() >= 2, 'Tux Index uses the same bar as everywhere else');
+  /* every conference row is built from SIDES: the fixture has 8 games, so the two
+     conferences together must account for 16 side-appearances */
+  const gTotal = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#confledger tbody tr td:nth-child(3)')).reduce((s,td)=>s+(+td.textContent||0),0));
+  check(gTotal === 16, 'a game counts once for each side, so 8 games make 16 (got ' + gTotal + ')');
+  /* sorting is real, not decorative */
+  const before = await page.locator('#confledger tbody tr td.l b').allTextContents();
+  await page.click('#confledger th[data-k="ppgF"]');
+  await page.waitForTimeout(150);
+  const afterSort = await page.locator('#confledger th.sorted').textContent();
+  check(/PPG/.test(afterSort || ''), 'clicking a heading moves the sort: ' + (afterSort||'').trim());
+  await page.click('#confledger th[data-k="ppgF"]');
+  await page.waitForTimeout(150);
+  const flipped = await page.locator('#confledger tbody tr td.l b').allTextContents();
+  check(flipped.join() !== before.join() || flipped.length === 1,
+        'clicking the same heading twice reverses it');
+  await page.click('#confledger th[data-k="idx"]');
+  await page.waitForTimeout(150);
+  /* the division picker drives BOTH cards */
+  const divOpts = await page.locator('#cf-div option').allTextContents();
+  check(divOpts.length >= 1 && /FBS/.test(divOpts.join(' ')), 'the division picker lists what the archive holds: ' + divOpts.join(' | '));
+  /* the ATS column must be a real fraction, not a permanent dash */
+  const atsCells = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#confledger tbody tr td:nth-child(9)')).map(td=>td.textContent.trim()));
+  check(atsCells.some(t => /\d-\d/.test(t)),
+        'the ATS column settles priced games instead of showing a dash: ' + atsCells.join(' | '));
+  /* the summary sentence must agree with the table it sits above */
+  const lede = await page.textContent('#confledger');
+  check(/Best football to watch/.test(lede), 'the ledger hands over its answer in a sentence');
+  const ledeConf = (lede.match(/Best football to watch: ([^ ]+ ?[^ ]*) at (\d+)/) || []);
+  check(!!ledeConf[2], 'and the sentence names a number: ' + (ledeConf[0]||'none').trim());
+  check(/best: /.test(await page.textContent('#confledger tbody')),
+        'each conference row labels its best game rather than dropping a bare matchup');
+  const sTxt3 = await page.textContent('#m-season');
+  check(/complete picture for this division/.test(sTxt3),
+        'FBS is labeled as the complete picture');
+  check(/sides rather than games/.test(sTxt3),
+        'the ledger explains that a conference game counts twice');
+  check(/non-conference/i.test(sTxt3), 'the head-to-head says it is non-conference only');
+  /* ---- the conference drill-down ---- */
+  check(await page.locator('#confledger tr.crow').count() >= 2, 'every ledger row is clickable');
+  check(await page.locator('#confledger tr.crow[role="button"]').count() >= 2,
+        'and reachable from the keyboard');
+  await page.click('#confledger tr.crow');
+  await page.waitForTimeout(300);
+  check(await page.locator('#drawer.on').count() === 1, 'a conference row opens the drawer');
+  const cfTxt = await page.textContent('#drawer-body');
+  check(/conference breakdown/.test(cfTxt), 'the drawer says what it is showing');
+  check(/Who produced it/.test(cfTxt), 'and it is a breakdown by team');
+  check(await page.locator('#drawer .cstat').count() === 5,
+        'the conference totals are restated at the top so the drawer agrees with the row');
+  const cth = await page.locator('#drawer table.cteam th').allTextContents();
+  check(/vs conf/.test(cth.join(' ')), 'the last real column is each team\'s distance from its own average');
+  const crow = await page.locator('#drawer table.cteam tbody tr').count();
+  check(crow >= 1, 'at least one team row (got ' + crow + ')');
+  /* the drawer arithmetic must reconcile with the ledger row that opened it */
+  const drawerG = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#drawer table.cteam tbody tr td:nth-child(2)')).reduce((s,td)=>s+(+td.textContent||0),0));
+  const statG = +(await page.locator('#drawer .cstat b').first().textContent());
+  check(drawerG === statG, 'the team rows add up to the conference total (' + drawerG + ' vs ' + statG + ')');
+  check(await page.locator('#drawer .lchip.empty').count() === 0, 'no blank crest in the drawer either');
+  /* the payoff column must be VISIBLE, not just present - at the original 560px it
+     fell off the right edge of the panel and needed a horizontal scroll to find */
+  check(await page.locator('#drawer.wide').count() === 1, 'the conference panel is the wide one');
+  const vsFits = await page.evaluate(() => {
+    const ths = Array.from(document.querySelectorAll('#drawer table.cteam th'));
+    const vs = ths.find(t => /vs conf/i.test(t.textContent));
+    if (!vs) return null;
+    const wrap = vs.closest('.tablewrap');
+    return vs.getBoundingClientRect().right <= wrap.getBoundingClientRect().right + 1;
+  });
+  check(vsFits === true, 'and "vs conf" is on screen without scrolling sideways');
+  /* a team's best game opens the box score from inside the conference drawer */
+  await page.click('#drawer button.mini.game');
+  await page.waitForTimeout(250);
+  check(/The box/.test(await page.textContent('#drawer-body')),
+        'the box button swaps the drawer to that game');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  check(await page.locator('#drawer.on').count() === 0, 'escape closes it');
+
+  const h2hRows = await page.locator('#crossconf .h2hrow').count();
+  check(h2hRows >= 1, 'the non-conference board has at least one pairing (got ' + h2hRows + ')');
+  check(await page.locator('#crossconf .h2hrow .lead').count() >= 1, 'the series leader is marked');
+  check(await page.locator('#crossconf .h2hrow .rec').count() === h2hRows, 'every pairing shows a record');
 
   /* Q3 symbology panel, and the tip above the map */
   await page.click('#nav button[data-mode="yard"]');
