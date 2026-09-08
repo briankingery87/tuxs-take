@@ -518,6 +518,46 @@ const RANKINGS = [].concat(
   await page.waitForTimeout(200);
   check(await page.locator('#drawer.on').count() === 0, 'Escape closes the drawer');
 
+  /* ---- deep link: a game now has a URL of its own ---- */
+  await page.click('#nav button[data-mode="aftermath"]');
+  await page.waitForTimeout(300);
+  await page.click('#m-aftermath .game');
+  await page.waitForTimeout(250);
+  const openedUrl = page.url();
+  check(/[?&]game=\d+/.test(openedUrl), 'opening a game stamps ?game= on the URL: ' + openedUrl.split('/').pop());
+  const shareBtn = await page.locator('#share-btn').count();
+  check(shareBtn === 1, 'the drawer offers a labelled copy-link button');
+  const shareUrl = await page.getAttribute('#share-btn', 'data-url');
+  check(/[?&]game=\d+/.test(shareUrl) && /#aftermath/.test(shareUrl),
+        'the shared link carries the game and lands on The Aftermath: ' + shareUrl.split('/').pop());
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  check(!/[?&]game=/.test(page.url()), 'closing the drawer takes the game back out of the URL');
+
+  /* a cold load of ?game=<id> must open that game, not just the page */
+  await page.goto('file://' + path.resolve(__dirname, 'index.html') + '?game=5');
+  await page.waitForFunction(() => document.querySelector('#loadstate') &&
+    !/Connecting/.test(document.querySelector('#loadstate').textContent), { timeout:15000 });
+  await page.waitForTimeout(500);
+  check(await page.locator('#drawer.on').count() === 1, 'a cold ?game=5 load opens the drawer');
+  const deepTxt = await page.textContent('#drawer-body');
+  check(/Overtime U|Free Football St/.test(deepTxt), 'the deep link opened the RIGHT game: ' + deepTxt.slice(0,60).replace(/\s+/g,' '));
+  check(await page.locator('#m-aftermath.on').count() === 1, 'the deep link also lands on The Aftermath page');
+
+  /* an id the archive does not hold must say so, not fail silently */
+  await page.goto('file://' + path.resolve(__dirname, 'index.html') + '?game=999999');
+  await page.waitForFunction(() => document.querySelector('#loadstate') &&
+    !/Connecting/.test(document.querySelector('#loadstate').textContent), { timeout:15000 });
+  await page.waitForTimeout(500);
+  const missTxt = await page.textContent('#drawer-body');
+  check(/not in the archive/.test(missTxt) && /999999/.test(missTxt),
+        'an unknown game id degrades loudly and names the id');
+  await page.keyboard.press('Escape');
+  await page.goto('file://' + path.resolve(__dirname, 'index.html'));
+  await page.waitForFunction(() => document.querySelector('#loadstate') &&
+    !/Connecting/.test(document.querySelector('#loadstate').textContent), { timeout:15000 });
+  await page.waitForTimeout(400);
+
   /* Q3 - the map places what it can and says what it could not */
   await page.click('#nav button[data-mode="yard"]');
   await page.waitForTimeout(700);

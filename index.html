@@ -1249,6 +1249,15 @@ pre.beat{margin:0;background:rgba(0,0,0,.34);border:1px solid var(--line);border
 #drawer.wide{width:min(880px,100%)}
 #drawer .x{position:absolute;top:13px;right:15px;background:none;border:1px solid var(--line-strong);
   border-radius:7px;width:30px;height:30px;cursor:pointer;color:var(--ink-2);font-size:16px;line-height:1}
+/* Share row. A game drawer now has a URL of its own, and a link nobody can find is
+   the same as no link, so it gets a labelled button rather than a bare address bar. */
+.sharerow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 0}
+.sharerow .lk{font-size:11px;color:var(--ink-3);font-family:ui-monospace,Menlo,Consolas,monospace;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 160px}
+button.share{background:var(--accent-deep);border:1px solid var(--accent);color:#04121C;font-weight:800;
+  border-radius:7px;padding:5px 11px;cursor:pointer;font-size:12px}
+button.share.done{background:transparent;color:var(--accent)}
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 14px;font-size:13px}
 .kv dt{color:var(--ink-3);white-space:nowrap}
 .kv dd{margin:0;font-variant-numeric:tabular-nums}
@@ -3559,6 +3568,7 @@ function openConference(conf){
       : '<p class="sub tiny" style="margin-top:11px">FBS is recapped in full, so this is every game ' +
         'these teams have played.</p>');
   wireCards('#drawer-body');
+  setGameParam(null);          // this panel is a conference, not the game in the URL
   $('#drawer').classList.add('wide');
   $('#drawer').classList.add('on'); $('#drawer').setAttribute('aria-hidden','false');
   $('#scrim').classList.add('on');
@@ -3566,6 +3576,78 @@ function openConference(conf){
 }
 
 /* ---------- 5. drawer: one game in full --------------------------- */
+/* A GAME HAS A URL.
+   The page routes on the hash (#aftermath, #dig, ...), which addresses a PAGE. A
+   single game is a drawer, so until now it could not be linked to at all - you could
+   send someone to The Aftermath and tell them to scroll. The game id rides in the
+   QUERY string instead of the hash, so it is orthogonal to the page router and
+   survives every setMode() call untouched: ?game=401896383. This is also what Ask
+   the Atlas links to from a completed game on The Slate. */
+const GAME_PARAM = 'game';
+function gameUrl(gid){
+  const u = new URL(location.href);
+  u.searchParams.set(GAME_PARAM, gid);
+  u.hash = 'aftermath';
+  return u.toString();
+}
+function setGameParam(gid){
+  const u = new URL(location.href);
+  if (gid == null) u.searchParams.delete(GAME_PARAM); else u.searchParams.set(GAME_PARAM, gid);
+  history.replaceState(null, '', u.pathname + u.search + u.hash);
+}
+function shareRow(gid){
+  return '<div class="sharerow">' +
+    '<button class="share" id="share-btn" data-url="'+esc(gameUrl(gid))+'">Copy link to this game</button>' +
+    '<span class="lk">?'+GAME_PARAM+'='+gid+'</span></div>';
+}
+function wireShare(){
+  const b = $('#share-btn'); if (!b) return;
+  b.onclick = async () => {
+    const url = b.dataset.url;
+    try { await navigator.clipboard.writeText(url); }
+    catch(e){ /* clipboard is blocked in some contexts - fall back to a selectable prompt */
+      const ta = document.createElement('textarea');
+      ta.value = url; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      try{ document.execCommand('copy'); }catch(e2){}
+      ta.remove();
+    }
+    b.textContent = 'Link copied'; b.classList.add('done');
+    setTimeout(()=>{ b.textContent = 'Copy link to this game'; b.classList.remove('done'); }, 1800);
+  };
+}
+/* Open whatever ?game= asks for, once the archive is loaded. A game id that is not in
+   the archive is a real outcome, not a bug - the archive skips D2 and D3 - so it says
+   so in the drawer rather than doing nothing and looking broken. */
+function openRequestedGame(){
+  const raw = new URLSearchParams(location.search).get(GAME_PARAM);
+  if (!raw) return false;
+  const gid = Number(raw);
+  const g = isFinite(gid) ? DB.games.find(x=>x.game_id===gid) : null;
+  if (g){
+    AF.week = g.week_key;
+    drawn.delete('aftermath');
+    setMode('aftermath');
+    openGame(gid);
+    return true;
+  }
+  setMode('aftermath');
+  $('#drawer-body').innerHTML =
+    '<div class="eyebrow">Deep link</div>' +
+    '<div style="font-size:20px;font-weight:900;margin:4px 0 8px">That game is not in the archive</div>' +
+    '<p class="sub">Nothing here is broken. <code>game_id ' + esc(String(raw)) + '</code> was asked for by the ' +
+    'link you followed, and this archive does not hold it.</p>' +
+    '<p class="sub tiny">The archive covers FBS in full plus the FCS games that were ranked, a rivalry, or ' +
+    'decided by seven or fewer. Division II and Division III are absent rather than empty - no free source ' +
+    'publishes their scores. A game played after the last weekly rebuild will also not be here yet.</p>' +
+    '<p class="sub tiny">Everything else on this page still works. Close this panel to browse the archive.</p>';
+  $('#drawer').classList.remove('wide');
+  $('#drawer').classList.add('on'); $('#drawer').setAttribute('aria-hidden','false');
+  $('#scrim').classList.add('on');
+  $('#drawer').scrollTop = 0;
+  return true;
+}
+
 function openGame(gid){
   const g = DB.games.find(x=>x.game_id===gid);
   if (!g) return;
@@ -3578,6 +3660,7 @@ function openGame(gid){
     '<div style="font-size:22px;font-weight:900;margin:4px 0 3px">'+esc(g._win)+' '+
       Math.max(g.home_points,g.away_points)+', '+esc(g._lose)+' '+Math.min(g.home_points,g.away_points)+'</div>' +
     '<div class="tiny dim" style="margin-bottom:13px">'+esc(g._matchup)+' &middot; '+esc(dstr(g.start_date))+'</div>' +
+    shareRow(g.game_id) +
     quarterTable(g).replace('class="qline"','class="qline" style="padding-left:0"') +
     (has(r.headline) ? '<div style="font-size:16px;font-weight:900;margin:11px 0 5px">'+esc(r.headline)+'</div>' : '') +
     (has(r.recap_body) ? '<p class="sub" style="font-size:13px">'+esc(r.recap_body)+'</p>' : '') +
@@ -3626,6 +3709,8 @@ function openGame(gid){
     (has(r.recap_body) ? TUX_NOTE.replace('class="tuxnote"',
         'class="tuxnote" style="margin-top:16px"') : '') +
     '<p class="tiny dim" style="margin-top:12px">Gamble Responsibly. 18+.</p>';
+  wireShare();
+  setGameParam(g.game_id);
   /* the game drawer is the narrow one - drop the conference width if it is still on
      from a previous open, including the case where a team's box button swapped the
      contents of an already-open conference panel */
@@ -3637,6 +3722,9 @@ function openGame(gid){
 function closeDrawer(){
   $('#drawer').classList.remove('on'); $('#drawer').setAttribute('aria-hidden','true');
   $('#scrim').classList.remove('on');
+  /* the URL described an OPEN drawer, so closing it has to take the game back out -
+     otherwise a reload or a copied address reopens a panel the reader just dismissed */
+  setGameParam(null);
 }
 
 /* ---------- 6. boot ---------------------------------------------- */
@@ -3684,7 +3772,8 @@ async function boot(){
     await loadAll();
     AF.week = DB.latestKey;
     drawn.clear();
-    setMode(location.hash.slice(1) || 'home');
+    /* ?game= wins over the hash: someone followed a link to one specific game */
+    if (!openRequestedGame()) setMode(location.hash.slice(1) || 'home');
   } catch (e) {
     $('#loadstate').innerHTML = '<b style="color:#F26430">Could not read the services.</b> ' + esc(e.message);
     $('#main').innerHTML = '<section class="mode on"><div class="card">' +
