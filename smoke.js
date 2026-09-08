@@ -525,8 +525,11 @@ const RANKINGS = [].concat(
   const yf = await page.textContent('#yd-foot');
   /* the Yard defaults to EVERY week, so it is 7 of 8 - one home team has no coordinates */
   check(/7 of 8 games placed/.test(yc), 'Yard places 7 of 8: ' + yc.replace(/\s+/g,' ').trim());
-  check(/1 game could not be placed/.test(yf) && /no campus coordinates/.test(yf),
-        'Yard names the gap rather than dropping it: ' + yf.replace(/\s+/g,' ').trim());
+  /* the footnote now NAMES the campuses, so the gap is actionable rather than merely
+     disclosed - the person who can fix it in the Teams layer gets told which team */
+  check(/1 game could not be placed/.test(yf) && /no coordinates in the Teams layer/.test(yf),
+        'Yard discloses the gap: ' + yf.replace(/\s+/g,' ').trim());
+  check(/Nowhere College/.test(yf), 'and names the team whose campus is missing');
   check(await page.locator('#map-yard .leaflet-interactive').count() >= 5, 'map draws markers');
 
   /* the symbology chooser: every scheme must redraw and relabel its own legend */
@@ -809,6 +812,70 @@ const RANKINGS = [].concat(
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check(over <= 1, 'no horizontal overflow at 390px: ' + p + ' (' + over + 'px)');
   }
+
+  /* ---- READABLE at 390px, not merely non-overflowing ------------------------
+     WHY THESE EXIST (2026-09-08). The overflow check above passed on every page
+     while the Top 25 was unreadable on a real phone: the opponent name rendered
+     0px wide and 156px tall, one letter per line. Text that WRAPS does not
+     overflow, so an overflow assertion is structurally blind to this entire class
+     of failure - and the fixture had the bug the whole time.
+     These measure rendered geometry instead. A text box narrower than a couple of
+     words, or taller than a couple of lines, is stacked, and stacked is broken. */
+  const narrow = [];
+  const measure = async (sel, minW, maxH, label) => {
+    const m = await page.evaluate(([sel]) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    }, [sel]);
+    if (!m) { narrow.push(label + ' (not present)'); return; }
+    const ok = m.w >= minW && m.h <= maxH;
+    check(ok, label + ' is readable at 390px (' + m.w + 'x' + m.h + 'px, needs >=' +
+          minW + ' wide and <=' + maxH + ' tall)');
+    if (!ok) narrow.push(label + ' ' + m.w + 'x' + m.h);
+  };
+
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(350);
+  /* poll mode: the result cell is the one that collapsed */
+  await measure('#top25 .pres .on', 70, 46, 'the poll board result name');
+  await measure('#top25 .brow .mu .nm', 70, 46, 'the poll board team name');
+  const rowH = await page.evaluate(() =>
+    Math.round(document.querySelector('#top25 .brow').getBoundingClientRect().height));
+  /* 150px is four stacked bands - rank+team, result, bar, pills - which is what a
+     390px-wide row honestly needs. The BROKEN state measured 282px, so the threshold
+     sits between the two rather than at a round number. */
+  check(rowH <= 175, 'a poll row stays a row rather than a column at 390px (' + rowH + 'px tall)');
+  /* tux mode: the headline cell shares that grid slot and must survive the same way */
+  await page.selectOption('#tp-poll', '__tux');
+  await page.waitForTimeout(300);
+  await measure('#top25 .brow .hl', 120, 60, 'the Tux board headline');
+  await page.selectOption('#tp-poll', 'AP Top 25');
+  await page.waitForTimeout(300);
+
+  /* Q4's week table: the label column was crushed to 34px and 128px tall */
+  await page.click('#nav button[data-mode="season"]');
+  await page.waitForTimeout(450);
+  await measure('#m-season table.wks:not(.conf):not(.cteam) th.l', 55, 40, 'the week table heading');
+  await measure('#m-season table.wks:not(.conf):not(.cteam) td.l', 55, 60, 'the week label cell');
+  await measure('#confledger table.wks.conf th.l', 70, 40, 'the conference ledger heading');
+  /* the wide tables must be SCROLLABLE rather than squeezed - the fix relies on the
+     existing .tablewrap doing the work once the label stops collapsing */
+  const scrolls = await page.evaluate(() => {
+    const out = {};
+    document.querySelectorAll('#m-season .tablewrap').forEach((w,i) => {
+      out['wrap'+i] = { canScroll: w.scrollWidth > w.clientWidth + 1,
+                        table: Math.round(w.querySelector('table').getBoundingClientRect().width),
+                        wrap: w.clientWidth };
+    });
+    return out;
+  });
+  check(Object.values(scrolls).every(v => v.canScroll),
+        'every wide table scrolls sideways instead of crushing: ' + JSON.stringify(scrolls));
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(300);
+  if (narrow.length) console.log('  collapsed boxes:', narrow.join(' | '));
   await page.click('#nav button[data-mode="home"]');
   await page.waitForTimeout(350);
   await page.evaluate(()=>window.scrollTo(0,1100));

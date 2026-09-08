@@ -886,7 +886,19 @@ table.wks th,table.wks td{padding:7px 10px;border-bottom:1px solid var(--line);t
   font-variant-numeric:tabular-nums;white-space:nowrap}
 table.wks th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
   font-weight:900;position:sticky;top:0;background:var(--panel-2)}
-table.wks th.l,table.wks td.l{text-align:left;white-space:normal;overflow-wrap:anywhere}
+/* MEASURED 2026-09-08 at 390px: this column came out 34px wide and 128px tall, with
+   "Week 12" stacked one letter per line, while the table itself was 859px inside a
+   318px scroller. The scroll was working; the LABEL was the problem.
+   `overflow-wrap:anywhere` gives a cell a min-content width of one character, so table
+   auto-layout is free to crush it to nothing and spend the width on the nowrap numeric
+   columns instead. The Dig never had this because table.dig sets nowrap on the whole
+   table. Keep the label on one line and let the existing .tablewrap scroll do its job. */
+table.wks th.l,table.wks td.l{text-align:left;white-space:nowrap;overflow-wrap:normal}
+/* The conference and team tables carry a second line under the name - "best: X at Y" -
+   which SHOULD wrap. Scope the wrapping to that line rather than the whole cell. */
+table.wks.conf td.l,table.wks.cteam td.l{white-space:normal}
+table.wks.conf td.l>b,table.wks.cteam td.l .tn{white-space:nowrap}
+table.wks.conf .cbest,table.wks.cteam .cbest{white-space:normal;overflow-wrap:break-word}
 table.wks td.wi{font-weight:900;color:var(--accent)}
 table.wks tbody tr.latest{background:rgba(242,100,48,.09)}
 table.wks tbody tr.latest td.l b{color:var(--alert)}
@@ -1016,16 +1028,26 @@ td .tgrade b{font-size:13px}
 .brow .hl.none{color:var(--ink-3);font-weight:400;font-style:normal}
 .boardhead{display:grid;grid-template-columns:30px minmax(255px,370px) minmax(0,1fr) minmax(96px,132px) 186px;gap:12px;
   padding:0 11px 5px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:900}
+/* MOBILE. Measured 2026-09-08 on a real phone: the poll board's RESULT cell was
+   rendering 0px wide and 156px tall - the opponent name stacked one letter per line,
+   and the row grew to 282px. Cause: .pres sits in the same grid slot as .hl, and both
+   of these breakpoints pulled .hl onto its own row and left .pres to auto-place into a
+   track sized for a number. `overflow-wrap:anywhere` then did the rest.
+   The two selectors are kept together deliberately - whatever happens to one of these
+   cells has to happen to the other, because they are the same column. */
 @media (max-width:1100px){
   .brow,.boardhead{grid-template-columns:30px minmax(0,1fr) minmax(96px,132px) 186px}
-  .brow .hl{grid-column:2 / -1;margin-top:-2px}
+  .brow .hl,.brow .pres{grid-column:2 / -1;margin-top:-2px}
   .boardhead span:nth-child(3){display:none}
 }
 @media (max-width:760px){
-  .brow,.boardhead{grid-template-columns:26px minmax(0,1fr)}
-  .brow .hl,.brow .mbar,.brow .rt{grid-column:1 / -1}
+  /* 40px rather than 26px: in poll mode this track carries the rank AND its movement
+     arrow, and at 26px the pair wrapped inside its own cell. */
+  .brow,.boardhead{grid-template-columns:40px minmax(0,1fr)}
+  .brow .hl,.brow .pres,.brow .mbar,.brow .rt{grid-column:1 / -1}
   .brow .rt{justify-content:flex-start}
   .boardhead span:nth-child(n+3){display:none}
+  .brow .rk{flex-direction:row;gap:5px}
 }
 
 /* ---------- the Top 25 in POLL mode ----------
@@ -1046,7 +1068,7 @@ td .tgrade b{font-size:13px}
 .pres.w b{color:#54c78a}
 .pres.l b{color:var(--alert)}
 .pres.t b{color:var(--ink-3)}
-.pres .on{font-weight:700;color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.pres .on{font-weight:700;color:var(--ink-2);min-width:0;overflow-wrap:break-word}
 .pres .sc{font-weight:900;font-variant-numeric:tabular-nums;flex:none}
 .pres.w .sc{color:var(--ink)}
 .pres.l .sc{color:var(--ink-2)}
@@ -1891,7 +1913,15 @@ function gameCard(g){
    number nobody computed is just a menu item. */
 function homeQuestions(){
   const wk = DB.games.filter(g=>g.week_key===DB.latestKey);
+  /* WHY THIS NUMBER IS SMALLER THAN THE OTHERS (2026-09-08, BK).
+     The header and Q2 both count the archive; this card counts what can be DRAWN. A
+     game whose home team has no campus point in the Teams layer cannot be plotted, so
+     the two numbers differ by however many those are - one, on 2026-09-08, out of 323.
+     The number was right and the label was not: "322 games on the map" beside a header
+     that says 323 reads as an off-by-one bug rather than as a narrower denominator.
+     Say both numbers, and say why. */
   const placed = DB.games.filter(g=>DB.coords.has(g.home_id)).length;
+  const unplaced = DB.games.length - placed;
   return [
     { id:'aftermath', label:'The Aftermath', q:'What did I miss?',
       d:'Every finished game on the week, scored 0-100 on the Aftermath Index and ranked by how good '
@@ -1905,7 +1935,14 @@ function homeQuestions(){
     { id:'yard', label:'The Yard', q:'Where did it happen?',
       d:'Every game mapped at the host campus, colored by the angle its recap was written about and '
         + 'sized by the final margin. Click a dot to open the game.',
-      n:nfmt(placed), nl:'games on the map' },
+      n:nfmt(placed), nl:unplaced
+        ? 'of ' + nfmt(DB.games.length) + ' on the map'
+        : 'games on the map',
+      /* the reason travels with the number, so the card explains itself */
+      tip:unplaced
+        ? unplaced + ' game' + (unplaced===1?'':'s') + ' cannot be drawn: the host campus has no '
+          + 'coordinates in the Teams layer. Nothing is missing from the archive - only from the map.'
+        : 'Every game in the archive has a host campus with coordinates.' },
     { id:'season', label:'The Long Season', q:'Which week was the best one?',
       d:'The archive end to end: a Week Index built from each week\u2019s ten best games, the chaos each '
         + 'week caused, and who has been the most entertaining program to watch.',
@@ -2218,7 +2255,8 @@ function renderHome(el){
           '<div class="qnum">Question '+(i2+1)+'</div>' +
           '<div class="qt">'+esc(x.q)+'</div>' +
           '<div class="qd">'+esc(x.d)+'</div>' +
-          '<div class="qstat"><b>'+x.n+'</b><span>'+esc(x.nl)+'</span></div>' +
+          '<div class="qstat"'+(x.tip?' title="'+esc(x.tip)+'"':'')+'><b>'+x.n+'</b>' +
+            '<span>'+esc(x.nl)+'</span></div>' +
           '<div class="go">Open '+esc(x.label)+' <i>&rarr;</i></div>' +
         '</button>').join('') + '</div>' +
     '</div>' +
@@ -2646,9 +2684,20 @@ function drawYard(){
   presetNote('yd-presets', YARD.presets);
   const missing = g.length - pts.length;
   $('#yd-count').innerHTML = '<b>'+pts.length+'</b> of '+g.length+' games placed';
+  /* NAME THE GAP (2026-09-08). This used to say "1 game could not be placed" and stop,
+     which told a reader there was a hole and told the person who could FIX it nothing.
+     The teams are named now, so the missing coordinates surface themselves and can go
+     straight into notebook 16's corrections rather than being reconstructed from the
+     raw pulls - which, when I tried, disagreed with the service by two teams. */
+  const orphans = Array.from(new Set(g.filter(x => !DB.coords.has(x.home_id))
+                                      .map(x => x.home_team).filter(has))).sort();
   $('#yd-foot').innerHTML = missing
-    ? missing + ' game' + (missing===1?'':'s') + ' could not be placed - the home team has no campus coordinates ' +
-      'in the Teams layer. They are counted here rather than quietly dropped.'
+    ? missing + ' game' + (missing===1?'':'s') + ' could not be placed - the host campus has no ' +
+      'coordinates in the Teams layer' +
+      (orphans.length ? ': <b>' + orphans.slice(0,6).map(esc).join(', ') + '</b>' +
+        (orphans.length > 6 ? ' and ' + (orphans.length-6) + ' more' : '') : '') +
+      '. Nothing is missing from the archive - only from the map, and they are counted ' +
+      'here rather than quietly dropped.'
     : 'Every game that survived the filters is on the map.';
   if (pts.length){
     try { yardBounds = L.latLngBounds(pts).pad(.12); yardMap.fitBounds(yardBounds,{ animate:false, maxZoom:8 }); }
