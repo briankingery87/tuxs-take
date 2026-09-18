@@ -426,6 +426,28 @@ td .tgrade b{font-size:13px}
 .brow .rk{display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1}
 .brow .cf{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
   font-weight:700;flex:none}
+/* ---------- the Top 25 status row ----------
+   Two halves of one line rather than two stacked banners: what you are looking at, and
+   what else there is. Uses the width the card already has instead of adding height. */
+.pstat{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:14px;
+  align-items:center;margin:11px 0 13px;padding:9px 13px;border-radius:var(--r);
+  border:1px solid var(--line);background:rgba(255,255,255,.025)}
+.pnow{display:flex;align-items:baseline;gap:9px;min-width:0}
+.pnow b{font-size:15px;font-weight:900;white-space:nowrap}
+.pnow span{font-size:12px;color:var(--ink-2);min-width:0}
+.pnow .sep{color:var(--ink-3);flex:none}
+.pnew{display:flex;align-items:center;gap:10px;justify-content:flex-end;min-width:0;
+  padding-left:14px;border-left:1px solid var(--line)}
+.pnew span{font-size:12px;color:var(--ink-2);min-width:0;line-height:1.35}
+.pnew b{color:var(--alert)}
+.pnew button{flex:none}
+.pnew.quiet span{color:var(--ink-3)}
+@media (max-width:820px){
+  .pstat{grid-template-columns:minmax(0,1fr);gap:9px}
+  .pnew{justify-content:flex-start;padding-left:0;border-left:none;
+    border-top:1px solid var(--line);padding-top:9px;flex-wrap:wrap}
+  .pnew span{flex:1 1 100%}
+}
 .brow.noop{cursor:default;opacity:.62}
 .brow.noop:hover{border-color:var(--line);background:var(--panel-2)}
 .mv{font-size:9px;font-weight:900;letter-spacing:.02em;font-variant-numeric:tabular-nums}
@@ -1453,16 +1475,46 @@ const BOARD_N = 25;   /* a Top 25, the same length the sport already counts in *
    game fell outside what the pipeline recaps, and those are different facts. */
 const TOP = { poll:null, key:null };
 
+/* WHICH SNAPSHOT A POLL OPENS ON (2026-09-18, BK).
+   The settled-week rule fixed Tux mode and never reached poll mode, because a poll week
+   and an archive week are not the same thing: the AP poll for week 3 publishes on the
+   Sunday, days before week 3's games are played, let alone recapped. On 2026-09-18 that
+   produced a board headed "week 3 of 2026" sitting above the line "0 of these 25 teams
+   have a game in Tux's archive for that week" - twenty-five rows of nothing, which is
+   the exact complaint the settled-week rule was meant to end.
+   So a poll opens on the snapshot that LINES UP with the settled week. Failing that, the
+   newest snapshot with any archived game at all. Only if neither exists does it fall back
+   to the newest, because a poll with nothing to show against it still beats a blank page -
+   and the note above the board says which case you are looking at. */
+function pollSetForBoard(name){
+  const sets = DB.pollSets.filter(p => p.poll === name);    /* already newest first */
+  if (!sets.length) return null;
+  const bw = DB.weeks.find(w => w.key === DB.boardKey);
+  if (bw){
+    const exact = sets.find(p => p.season === bw.season && p.week === bw.week);
+    if (exact) return exact;
+  }
+  const played = sets.find(p => p.rows.some(r => teamGameIn(r.team_id, p.season, p.week)));
+  return played || sets[0];
+}
+
 function topDefault(){
-  /* Open on the AP poll's newest snapshot. Fall back through the editorial order, then
-     to Tux's own board if Rankings is empty (true every preseason). */
+  /* Open on the AP poll, on the snapshot that has games behind it. Fall back through the
+     editorial order, then to Tux's own board if Rankings is empty (true every preseason). */
   for (const name of POLL_ORDER){
-    const hit = DB.pollSets.find(p => p.poll===name);
+    const hit = pollSetForBoard(name);
     if (hit) return { poll:name, key:hit.key };
   }
-  if (DB.pollSets.length) return { poll:DB.pollSets[0].poll, key:DB.pollSets[0].key };
+  if (DB.pollSets.length){
+    const hit = pollSetForBoard(DB.pollSets[0].poll) || DB.pollSets[0];
+    return { poll:hit.poll, key:hit.key };
+  }
   return { poll:TUX_POLL, key:DB.boardKey };
 }
+
+/* pollBehindNote() used to be a full-width banner of its own. It folded into
+   pollStatus() above, which says the same thing in the right-hand half of one row and
+   gives it a button instead of an instruction. */
 
 function movePill(rank, prev){
   if (!prev) return '<span class="mv new" title="Not in the previous poll, or this is the season’s first poll.">new</span>';
@@ -1581,25 +1633,59 @@ function pollHeadNote(isTux, set){
   return set.poll + ' · week ' + set.week + ' of ' + set.season + ' · ranked by the voters, not by Tux';
 }
 
-const TOP_INTRO = 'Opens on the <b>AP Top 25</b>. The picker swaps in the Coaches Poll, the FCS poll, and ' +
-  'the Division II and III coaches polls - or <b>Tux&rsquo;s Top 25</b>, which is a different thing entirely: ' +
-  'the polls rank <b>teams</b>, Tux ranks <b>games</b>. On a poll, each row shows what that team actually did ' +
-  'that week and what Tux made of it.';
+/* One sentence. The old intro ran four lines and sat above two more full-width notice
+   bars and a paragraph - four blocks of explanation before the reader reached a single
+   row of the thing they came for. What survives is the one distinction that is not
+   obvious from looking: a poll ranks TEAMS, Tux ranks GAMES. */
+const TOP_INTRO = 'The polls rank <b>teams</b>; <b>Tux&rsquo;s Top 25</b> ranks <b>games</b>. On a poll, ' +
+  'every row shows what that team actually did that week and what Tux made of it.';
 
-function pollBoardBody(set){
-  const n = set.rows.length;
+/* ONE STATUS LINE, NOT THREE BLOCKS (2026-09-18, BK).
+   This used to render a full-width tip bar, then a full-width "a newer poll exists"
+   bar, then a five-line paragraph - three stacked explanations above a board that
+   explains itself. They are now one row that uses the width instead of the height:
+   what you are looking at on the left, what else is available on the right, with a
+   button that actually goes there rather than telling you to find a dropdown.
+   The detail that was in the paragraph (what the arrow means, what the bar is) moved
+   into the column headings, where the eye already is when it wants to know. */
+function pollStatus(set){
+  const n      = Math.min(set.rows.length, BOARD_N);
   const played = set.rows.slice(0, BOARD_N)
     .filter(r => teamGameIn(r.team_id, set.season, set.week)).length;
-  return '<div class="hint" style="margin:11px 0 13px"><span class="k">Tip</span><div>Click any row with an ' +
-      'archived game to open the <b>full box score</b>. Rows without one are greyed - a ranked team that had ' +
-      'a bye, or whose game sits outside what the pipeline recaps, has nothing to open.</div></div>' +
-    '<p class="sub" style="margin:0 0 13px">' + esc(set.poll) + ', as it stood in <b>week ' + set.week +
-      '</b>. ' + played + ' of these ' + Math.min(n, BOARD_N) + ' teams have a game in Tux&rsquo;s archive for ' +
-      'that week; the arrow beside each rank is the move from the previous poll, and the bar is the Aftermath ' +
-      'Index of the game they played - so a team can be ranked first and still have had the dullest afternoon ' +
-      'on the board.</p>' +
-    '<div class="boardhead pollhead"><span>#</span><span>Team</span><span>Result</span>' +
-      '<span>Aftermath</span><span>Angle &amp; grade</span></div>' +
+  const sets   = DB.pollSets.filter(p => p.poll === set.poll);
+  const newest = sets.length ? sets[0] : null;
+  const behind = newest && newest.key !== set.key ? newest : null;
+
+  /* the middot is not decoration. Without a separator the two halves run together for
+     anything reading the text rather than the layout - screen readers, copy and paste,
+     and the smoke test all saw "Week 127 of 25 ranked teams played". */
+  const left = '<div class="pnow">' +
+      '<b>Week ' + set.week + '</b>' +
+      '<span class="sep" aria-hidden="true">&middot;</span>' +
+      '<span>' + played + ' of ' + n + ' ranked teams have a game in the archive</span>' +
+    '</div>';
+
+  const right = behind
+    ? '<div class="pnew"><span><b>Week ' + behind.week + '&rsquo;s poll is out</b> - ' +
+        'voted before those games were played, so there are no results to set against it ' +
+        'yet.</span><button class="mini" id="tp-jump" data-key="' + esc(behind.key) + '" ' +
+        'title="Switch this board to the week ' + behind.week + ' poll.">Show week ' +
+        behind.week + '</button></div>'
+    : '<div class="pnew quiet"><span>This is the newest ' + esc(pollLabel(set.poll)) +
+        ' published.</span></div>';
+
+  return '<div class="pstat">' + left + right + '</div>';
+}
+
+function pollBoardBody(set){
+  return pollStatus(set) +
+    '<div class="boardhead pollhead">' +
+      '<span title="Where the voters had this team this week. The arrow underneath is the move from the previous poll - new means it was unranked.">#</span>' +
+      '<span title="The ranked team, and the conference it plays in.">Team</span>' +
+      '<span title="What that team did in this week of Tux’s archive. Greyed rows had a bye, or a game the pipeline does not recap, so there is nothing to open.">Result</span>' +
+      '<span title="The Aftermath Index of the game they played, 0-100. A team can be ranked first and still have had the dullest afternoon on the board.">Aftermath</span>' +
+      '<span title="The one thing the recap was written about, and Tux’s letter grade for the game.">Angle &amp; grade</span>' +
+    '</div>' +
     '<div class="board">' + pollBoardRows(set) + '</div>';
 }
 
@@ -1674,11 +1760,18 @@ function tuxBoardBody(){
    week key from Tux's archive is meaningless to a poll and vice versa. */
 function wireTop(){
   const p = $('#tp-poll'), w = $('#tp-week');
+  /* "Pick week 3 in the filter" was an instruction. This is the thing itself. */
+  const j = $('#tp-jump');
+  if (j) j.onclick = () => { TOP.key = j.dataset.key; redrawTop(); };
   if (p) p.onchange = () => {
     TOP.poll = p.value;
+    /* pollSetForBoard, NOT pollSets.find - the same rule that picks the opening
+       snapshot has to pick it again when the reader switches polls, or swapping to
+       another poll lands on ITS newest week and the board goes empty again. The
+       smoke test caught this second site after the first one was fixed. */
     TOP.key  = TOP.poll === TUX_POLL
       ? DB.boardKey
-      : ((DB.pollSets.find(x => x.poll===TOP.poll)||{}).key || null);
+      : ((pollSetForBoard(TOP.poll) || {}).key || null);
     redrawTop();
   };
   if (w) w.onchange = () => { TOP.key = w.value; redrawTop(); };

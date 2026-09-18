@@ -135,6 +135,12 @@ const ORDER_W12 = [101,100,700,104,105,102,103,200,106,801,802,803,804,805,806,8
 const ORDER_W11 = [100,101,104,700,102,105,200,103,106,801,802,803,804,805,806,807,
                    808,809,810,811,812,813,814,815,816];
 const RANKINGS = [].concat(
+  /* WEEK 13 IS THE REAL WORLD (2026-09-18). The AP poll for a week publishes on the
+     Sunday, before that week's games are played - so the newest snapshot routinely has
+     NOTHING in the archive behind it. Week 13 exists here with no week-13 games at all,
+     which is exactly what BK hit: a board headed "week 3 of 2026" over "0 of these 25
+     teams have a game". The board must NOT open on it. */
+  pollRows(13,'AP Top 25', ORDER_W12),
   pollRows(12,'AP Top 25', ORDER_W12),
   pollRows(11,'AP Top 25', ORDER_W11),
   pollRows(12,'Coaches Poll', ORDER_W12),
@@ -309,8 +315,43 @@ const RANKINGS = [].concat(
   check(/Tux/.test(pollOpts[pollOpts.length-1] || ''),
         'Tux sorts last, after the real polls: ' + pollOpts.join(' | '));
   check(/Division III/.test(pollOpts.join(' ')), 'the D3 coaches poll is selectable');
-  check(await page.locator('#tp-week option').count() === 2,
+  check(await page.locator('#tp-week option').count() === 3,
         'the week filter lists every snapshot that poll has published');
+  /* THE FIX: the newest AP snapshot is week 13 and nothing in the archive was played
+     that week, so the board must open on week 12 instead - the newest snapshot that has
+     results to set against it. */
+  const openedOn = await page.locator('#tp-week').inputValue();
+  check(/\|12\|/.test(openedOn),
+        'the board opens on the newest poll that HAS games behind it, not the newest poll: ' + openedOn);
+  const behind = (await page.textContent('#top25')).replace(/\s+/g,' ');
+  check(/Week 13.s poll is out/.test(behind),
+        'and it says a newer poll exists rather than quietly showing an older one');
+  /* ONE status row, not a stack of banners. The old layout put a tip bar, a "newer
+     poll" bar and a five-line paragraph above the board; this asserts they collapsed. */
+  check(await page.locator('#top25 .pstat').count() === 1, 'the status is one row, not a stack');
+  check(await page.locator('#top25 .hint').count() === 0,
+        'the separate tip and poll banners are gone from poll mode');
+  /* normalise the middot to a spaced one: the DOM has no whitespace around it, which
+     is the point - the separator itself is what keeps the two numbers apart */
+  const nowTxt = (await page.textContent('#top25 .pnow'))
+    .replace(/\u00b7/g, ' \u00b7 ').replace(/\s+/g,' ').trim();
+  check(/^Week 12 \u00b7 \d+ of \d+ ranked teams have/.test(nowTxt),
+        'the left half reads correctly as plain text, not "Week 127 of 25": ' + nowTxt);
+  /* the callout is a BUTTON that goes there, not an instruction to find a dropdown */
+  check(await page.locator('#tp-jump').count() === 1, 'the newer poll is offered as a button');
+  await page.click('#tp-jump');
+  await page.waitForTimeout(250);
+  const jumped = await page.locator('#tp-week').inputValue();
+  check(/\|13\|/.test(jumped), 'clicking it switches the board to that poll: ' + jumped);
+  check(await page.locator('#top25 .brow').count() === 25, 'and the board redraws there');
+  check(await page.locator('#tp-jump').count() === 0,
+        'the button is gone once you are on the newest poll');
+  check(/newest/.test((await page.textContent('#top25 .pnew')).toLowerCase()),
+        'and the right half says so instead');
+  await page.selectOption('#tp-week', openedOn);
+  await page.waitForTimeout(250);
+  check(/0 of these 25/.test(behind) === false,
+        'so the board never opens on a poll with nothing behind it');
   const prows = await page.locator('#top25 .brow').count();
   check(prows === 25, 'a poll board is 25 rows even when the archive is shorter (got ' + prows + ')');
   /* the fixture ranks 17 teams that never played - those rows must render, not crash,
@@ -352,14 +393,21 @@ const RANKINGS = [].concat(
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
 
-  /* switching the week must repaint the board in place, not reload the page */
-  await page.selectOption('#tp-week', { index: 1 });
+  /* switching the week must repaint the board in place, not reload the page.
+     Index 2 is the OLDEST AP snapshot (the list runs newest first), which is the one
+     with no previous poll to move from. */
+  await page.selectOption('#tp-week', { index: 2 });
   await page.waitForTimeout(200);
   check(await page.locator('#top25 .brow').count() === 25, 'the week filter redraws the board');
   check(await page.locator('#top25 .mv.new').count() === 25,
         'the first poll of a season shows every team as new, because there is nothing to move from');
-  await page.selectOption('#tp-week', { index: 0 });
+  /* RESTORE BY VALUE, never by index. Index 0 is the NEWEST snapshot, which is exactly
+     the week the board deliberately does not open on - restoring to it left every row
+     disabled and timed out a click three hundred lines later. */
+  await page.selectOption('#tp-week', openedOn);
   await page.waitForTimeout(200);
+  check(await page.locator('#top25 .brow.game').count() > 0,
+        'restoring the week filter returns a board with clickable rows');
 
   /* ---- the Top 25, TUX MODE (what the board used to be, unchanged) ------ */
   await page.selectOption('#tp-poll', '__tux');
@@ -440,10 +488,12 @@ const RANKINGS = [].concat(
   const inBoard = await page.evaluate(() => {
     const card = document.querySelector('#m-home .board').closest('.card');
     const kids = Array.from(card.children);
-    return { hint: kids.findIndex(k=>k.classList.contains('hint')),
+    /* poll mode explains itself with .pstat, Tux mode with .hint - either way the
+       explanation comes BEFORE the rows it explains */
+    return { hint: kids.findIndex(k=>k.classList.contains('hint') || k.classList.contains('pstat')),
              board: kids.findIndex(k=>k.classList.contains('board')) };
   });
-  check(inBoard.hint > -1 && inBoard.hint < inBoard.board, 'the tip sits above the board');
+  check(inBoard.hint > -1 && inBoard.hint < inBoard.board, 'the explanation sits above the board');
   await page.click('#m-home .brow');
   await page.waitForTimeout(250);
   check(await page.locator('#drawer.on').count() === 1, 'a board row opens the box score drawer');
