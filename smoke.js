@@ -95,7 +95,11 @@ const RECAPS = RESULTS.map((g,i)=>({
     : 'AROOOOO. A recap body for game '+g.game_id+' that says some things about football and stops.',
   money_line: i===2 ? 'No Line State beat Nobody Booked 24-21.' : 'A quotable sentence for game '+g.game_id+'.',
   angle: ['nailbiter','upset','chalk','chalk','shootout','revenge','blowout','comeback'][i],
-  tux_grade: g.excitement_pctile>0 ? 'A' : PH.s,
+  /* A SPREAD OF GRADES, not eight A's. The Dig sorts this column as an ordered scale
+     and the Q4 grade curve buckets it, and neither could be tested while every game
+     carried the same letter. The order here is deliberately NOT alphabetical so a
+     string sort and a grade sort produce visibly different answers. */
+  tux_grade: g.excitement_pctile>0 ? ['B','A+','F','D','A','C','B+','A-'][i] : PH.s,
   voice_engine: i===2 ? 'template' : 'groq',
   voice_model: i===2 ? 'deterministic' : 'openai/gpt-oss-120b',
   style_version:'1.1', gen_status: i===2 ? 'template' : 'voiced',
@@ -225,6 +229,70 @@ const RANKINGS = [].concat(
         'sibling order is Experience, Ask the Atlas, Tux: ' + sibs.join(' | '));
   check(await page.locator('#m-home .sib.youarehere h4').count() === 1, 'Tux card is flagged "you are here"');
 
+  /* ---- division + conference, the same filter on three pages (2026-09-18) ----
+     Written once in the app so the pages cannot drift; tested on all three so a
+     future edit to one of them cannot quietly skip the others. */
+  for (const [page_id, prefix] of [['aftermath','af'], ['dig','dg'], ['yard','yd']]){
+    await page.click('#nav button[data-mode="'+page_id+'"]');
+    await page.waitForTimeout(350);
+    const div = await page.locator('#'+prefix+'-div').inputValue();
+    check(div === 'FBS', page_id + ' opens on FBS (got "' + div + '")');
+    check(await page.locator('#'+prefix+'-conf').count() === 1,
+          page_id + ' has a conference filter beside it');
+    const before = await page.locator('#'+prefix+'-conf option').count();
+    check(before >= 2, page_id + ' conference list is populated (' + before + ' options)');
+    /* the cascade: pick a conference, change the division, the conference must reset
+       rather than silently filtering on a conference the new division does not field */
+    const opts = await page.locator('#'+prefix+'-conf option').allTextContents();
+    const pick = opts.find(o => o !== 'All conferences');
+    if (pick){
+      await page.selectOption('#'+prefix+'-conf', pick);
+      await page.waitForTimeout(150);
+      check(await page.locator('#'+prefix+'-conf').inputValue() === pick,
+            page_id + ' holds the chosen conference');
+      await page.selectOption('#'+prefix+'-div', '');
+      await page.waitForTimeout(200);
+      check(await page.locator('#'+prefix+'-conf').inputValue() === '',
+            page_id + ' resets the conference when the division changes');
+      const after = await page.locator('#'+prefix+'-conf option').count();
+      check(after >= before, page_id + ' rebuilds the list for the new division (' +
+            before + ' -> ' + after + ')');
+      await page.selectOption('#'+prefix+'-div', 'FBS');
+      await page.waitForTimeout(200);
+    }
+  }
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(300);
+
+  /* ---- the last SETTLED week (2026-09-18) ----
+     A unit test on the rule rather than a fixture change: adding a thin week to the
+     fixture would move the counts every other assertion in this file depends on.
+     What matters is the decision, and the decision is a pure function of the weeks. */
+  const settled = await page.evaluate(() => {
+    const real = DB.weeks;
+    const run = weeks => { DB.weeks = weeks; const k = settledWeekKey();
+                           const ip = (DB.boardKey = k, inProgressWeek()); 
+                           return { k, ip: ip ? ip.key : null }; };
+    const out = {
+      /* a week two games in must not become the board */
+      thin:   run([{key:'w3',n:2},{key:'w2',n:131},{key:'w1',n:209}]),
+      /* a full newest week is the board */
+      full:   run([{key:'w3',n:120},{key:'w2',n:131},{key:'w1',n:209}]),
+      /* a thin ARCHIVE must not disqualify everything - the floor is 8, not a ratio */
+      early:  run([{key:'w1',n:9}]),
+      /* nothing qualifies: fall back to the newest rather than showing nothing */
+      tiny:   run([{key:'w2',n:2},{key:'w1',n:3}])
+    };
+    DB.weeks = real; DB.boardKey = settledWeekKey();
+    return out;
+  });
+  check(settled.thin.k === 'w2', 'a 2-game week does not become the board (' + settled.thin.k + ')');
+  check(settled.thin.ip === 'w3', 'and the in-progress week is reported so it can be named');
+  check(settled.full.k === 'w3', 'a full newest week IS the board (' + settled.full.k + ')');
+  check(settled.full.ip === null, 'and nothing is flagged as in progress');
+  check(settled.early.k === 'w1', 'a thin early archive still shows its only week');
+  check(settled.tiny.k === 'w2', 'when nothing qualifies it falls back to the newest');
+
   /* ---- the Top 25, POLL MODE (the default) ------------------------------
      Two boards share one grid, so both get tested: the poll first because that is
      what a first-time visitor sees, then Tux's own after switching the picker. */
@@ -316,6 +384,47 @@ const RANKINGS = [].concat(
   const clamp = await page.evaluate(() => getComputedStyle(document.querySelector('#top25 .brow .hl')).webkitLineClamp);
   check(clamp === '2', 'a long headline wraps to two lines instead of stretching the row');
   check(await page.locator('#top25 .brow .pill.angle').count() >= 6, 'board shows the recap angle on each row');
+  /* ---- the Dig's sort carets and the grade scale (2026-09-18) ---- */
+  await page.click('#nav button[data-mode="dig"]');
+  await page.waitForTimeout(400);
+  const caret0 = await page.evaluate(() => {
+    const th = document.querySelector('#dg-head th.s');
+    return { k: th && th.dataset.k, car: th && th.querySelector('.car').textContent,
+             aria: th && th.getAttribute('aria-sort'),
+             others: Array.from(document.querySelectorAll('#dg-head th:not(.s) .car'))
+                          .every(c => c.textContent === '') };
+  });
+  check(caret0.car === '▾' || caret0.car === '▴',
+        'the sorted column shows a direction caret (' + caret0.car + ')');
+  check(caret0.others, 'and no other column does');
+  check(caret0.aria === 'descending' || caret0.aria === 'ascending',
+        'the caret is mirrored in aria-sort for screen readers: ' + caret0.aria);
+  await page.click('#dg-head th[data-k="margin"]');
+  await page.waitForTimeout(200);
+  const down = await page.evaluate(() => document.querySelector('#dg-head th.s .car').textContent);
+  await page.click('#dg-head th[data-k="margin"]');
+  await page.waitForTimeout(200);
+  const up = await page.evaluate(() => document.querySelector('#dg-head th.s .car').textContent);
+  check(down !== up, 'clicking the same heading flips the caret (' + down + ' then ' + up + ')');
+  /* the grade column is an ORDERED SCALE, not a word. Alphabetically "A+" sorts after
+     "A" and "D" before "F"; by grade neither is true. */
+  await page.click('#dg-head th[data-k="_grade"]');
+  await page.waitForTimeout(250);
+  const gdesc = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#dg-body tr td:nth-child(4) .tgrade b')).map(b => b.textContent.trim()));
+  check(gdesc[0] === 'A+', 'first click on Tux Grade puts the BEST grade first (' + gdesc.join(' ') + ')');
+  const RANK = {'A+':13,'A':12,'A-':11,'B+':10,'B':9,'B-':8,'C+':7,'C':6,'C-':5,'D+':4,'D':3,'D-':2,'F':1};
+  const ordered = gdesc.every((g,i) => i===0 || RANK[gdesc[i-1]] >= RANK[g]);
+  check(ordered, 'and the whole column is in grade order, not alphabetical order');
+  check(gdesc.indexOf('A+') < gdesc.indexOf('A'), 'A+ outranks A');
+  check(gdesc.indexOf('D') < gdesc.indexOf('F') || gdesc.indexOf('D') < 0, 'D outranks F');
+  await page.click('#dg-head th[data-k="_grade"]');
+  await page.waitForTimeout(250);
+  const gasc = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#dg-body tr td:nth-child(4) .tgrade b')).map(b => b.textContent.trim()));
+  check(gasc[0] === 'F', 'clicking again puts the worst first (' + gasc.join(' ') + ')');
+  await page.click('#nav button[data-mode="home"]');
+  await page.waitForTimeout(300);
   check(await page.locator('#tp-week option').count() === 2,
         'Tux mode swaps the week filter to the archive weeks');
   await page.selectOption('#tp-poll', 'AP Top 25');
@@ -665,6 +774,68 @@ const RANKINGS = [].concat(
   check(/over 1 game/.test(sTxt2), 'the leaderboard sub-label says what the count is');
   check(/covered \d+ of \d+/.test(sTxt2) || /Not enough of the season/.test(sTxt2),
         'the ATS sub-label says what the fraction is');
+  /* ---- the season totals row (2026-09-18) ---- */
+  const tot = await page.evaluate(() => {
+    const t = document.querySelector('#m-season table.wks:not(.conf):not(.cteam)');
+    const f = t.querySelector('tfoot tr.tot');
+    if (!f) return null;
+    const cells = Array.from(f.children).map(td => td.textContent.trim());
+    const col = n => Array.from(t.querySelectorAll('tbody tr td:nth-child(' + n + ')'))
+                          .reduce((s,td) => s + (parseInt(td.textContent.replace(/,/g,''),10) || 0), 0);
+    return { cells, games: col(3), points: col(4) };
+  });
+  check(!!tot, 'the week table carries a season line');
+  if (tot){
+    check(/All \d+ weeks/.test(tot.cells[0]), 'it says how many weeks it covers: ' + tot.cells[0]);
+    check(/avg/.test(tot.cells[1]),
+          'the Week Index is labelled an average, not a total: ' + tot.cells[1]);
+    check(parseInt(tot.cells[2].replace(/,/g,''),10) === tot.games,
+          'games add up (' + tot.cells[2] + ' vs ' + tot.games + ')');
+    check(parseInt(tot.cells[3].replace(/,/g,''),10) === tot.points,
+          'points add up (' + tot.cells[3] + ' vs ' + tot.points + ')');
+  }
+
+  /* ---- the three Q4 charts (2026-09-18) ---- */
+  check(await page.locator('#ss-shape .cbars').count() === 1, 'the margin chart is on Q4');
+  check(await page.locator('#ss-shape .ccols').count() === 1, 'the grade curve is on Q4');
+  check(await page.locator('.cscat').count() === 1, 'the scatter is on Q4');
+  /* the margin bands must account for every game that has a margin - a chart whose
+     bars do not add up to the archive is inventing or losing games */
+  const mg = await page.evaluate(() => {
+    const vals = Array.from(document.querySelectorAll('#ss-shape .cbars .cbval'))
+                      .map(b => parseInt(b.textContent.replace(/,/g,''),10) || 0);
+    const head = document.querySelector('#ss-shape .card .sub').textContent;
+    return { sum: vals.reduce((a,v)=>a+v,0), bands: vals.length, head };
+  });
+  check(mg.bands === 5, 'five margin bands (got ' + mg.bands + ')');
+  check(mg.sum === 8, 'every game lands in exactly one band (' + mg.sum + ' of 8)');
+  check(/one score/.test(mg.head), 'the headline names what the highlight means');
+  /* the grade curve must bucket the fixture's spread rather than showing one bar */
+  const gc = await page.evaluate(() => Array.from(document.querySelectorAll('#ss-shape .ccol'))
+    .map(c => ({ k: c.querySelector('.cclab').textContent.trim(),
+                 n: parseInt(c.querySelector('.ccval').textContent,10) })));
+  check(gc.map(x=>x.k).join('') === 'ABCDF', 'the curve runs A to F: ' + gc.map(x=>x.k).join(''));
+  check(gc.filter(x=>x.n>0).length >= 3,
+        'and it spreads across bands rather than one: ' + gc.map(x=>x.k+x.n).join(' '));
+  check(gc.reduce((a,x)=>a+x.n,0) === 7, 'graded games only - the ungraded one is excluded');
+  /* the scatter: one dot per game that has BOTH numbers, and a dot opens its game */
+  const dots = await page.locator('.cscat .cdot').count();
+  check(dots === 8, 'one dot per game with both numbers (got ' + dots + ')');
+  check(await page.locator('.cscat .cdot title').count() === dots, 'every dot names its game on hover');
+  const rTxt = await page.textContent('.cscat');
+  check(typeof rTxt === 'string', 'the scatter renders axis text');
+  const corr = await page.evaluate(() => {
+    const p = Array.from(document.querySelectorAll('.card')).find(c => c.querySelector('.cscat'));
+    return (p.textContent.match(/r = (-?\d\.\d\d)/) || [])[1];
+  });
+  check(corr !== undefined && Math.abs(+corr) <= 1,
+        'it states a real correlation rather than asserting one: r = ' + corr);
+  await page.click('.cscat .cdot');
+  await page.waitForTimeout(250);
+  check(await page.locator('#drawer.on').count() === 1, 'a scatter dot opens the box score');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
   /* ---- the conference ledger, which replaced the Season top ten game feed ----
      The old assertion here was that Q4 ended in a .feed of gameCards. It deliberately
      does not any more: those cards are already on Home and on The Aftermath, so the
