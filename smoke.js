@@ -836,6 +836,62 @@ const RANKINGS = [].concat(
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
 
+  /* ---- the scatter's own filters (2026-09-18) ---- */
+  check(await page.locator('#sc-week').count() === 1, 'the scatter has a week filter');
+  check(await page.locator('#sc-div').count() === 1, 'and a division filter');
+  check(await page.locator('#sc-conf').count() === 1, 'and a conference filter');
+  /* unlike the browse pages this one opens on EVERYTHING - the claim is archive-wide */
+  check(await page.locator('#sc-div').inputValue() === '',
+        'it opens on every division, not FBS, because the claim is about the whole archive');
+  check(await page.locator('#sc-week').inputValue() === '', 'and on every week');
+
+  const scAxis0 = await page.evaluate(() => Array.from(
+    document.querySelectorAll('.cscat text')).map(t => t.textContent).join('|'));
+  const scR0 = await page.evaluate(() =>
+    (document.querySelector('#scatcard').textContent.match(/r = (-?\d\.\d\d)/) || [])[1]);
+  const scN0 = await page.locator('.cscat .cdot').count();
+
+  /* narrowing to one week must repaint the cloud and RECOMPUTE the correlation */
+  await page.selectOption('#sc-week', { index: 1 });
+  await page.waitForTimeout(300);
+  const scN1 = await page.locator('.cscat .cdot').count();
+  check(scN1 < scN0, 'picking a week shrinks the cloud (' + scN0 + ' -> ' + scN1 + ')');
+  const scCnt = (await page.textContent('#sc-count') || '').replace(/,/g,'').trim();
+  check(scCnt.indexOf(String(scN1)) === 0,
+        'the count beside the filters matches the dots drawn: ' + scCnt);
+  const scR1 = await page.evaluate(() =>
+    (document.querySelector('#scatcard').textContent.match(/r = (-?\d\.\d\d)/) || [])[1]);
+  check(scR1 === undefined || scR1 !== scR0 || scN1 === scN0,
+        'the correlation is recomputed for the selection (' + scR0 + ' -> ' + scR1 + ')');
+
+  /* THE AXIS MUST NOT MOVE. A chart that rescales on every filter cannot be compared
+     with itself, and the whole point of this one is watching the cloud change shape. */
+  const scAxis1 = await page.evaluate(() => Array.from(
+    document.querySelectorAll('.cscat text')).map(t => t.textContent).join('|'));
+  check(scAxis0 === scAxis1, 'and the axis stays pinned to the full archive so the cloud shrinks in place');
+
+  /* a filter combination with too little data must leave the FILTERS on screen - if the
+     card vanished with the plot there would be no way back to a wider selection */
+  await page.selectOption('#sc-conf', { index: 1 });
+  await page.waitForTimeout(300);
+  check(await page.locator('#scatcard').count() === 1, 'an over-narrow filter never removes the card');
+  check(await page.locator('#sc-week').count() === 1, 'and the filters survive so you can widen again');
+  const scTxt = await page.textContent('#sc-body');
+  const scLeft = await page.locator('.cscat .cdot').count();
+  check(scLeft > 0 || /Not enough games to plot/.test(scTxt),
+        'it either plots or says why it cannot: ' + scTxt.replace(/\s+/g,' ').trim().slice(0,64));
+
+  await page.selectOption('#sc-conf', '');
+  await page.selectOption('#sc-week', '');
+  await page.waitForTimeout(300);
+  check(await page.locator('.cscat .cdot').count() === scN0, 'clearing the filters restores every dot');
+  /* the dots must still be wired after a REDRAW, not only on first paint */
+  await page.click('.cscat .cdot');
+  await page.waitForTimeout(250);
+  check(await page.locator('#drawer.on').count() === 1, 'and a dot still opens its game after a redraw');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
   /* ---- the conference ledger, which replaced the Season top ten game feed ----
      The old assertion here was that Q4 ended in a .feed of gameCards. It deliberately
      does not any more: those cards are already on Home and on The Aftermath, so the
